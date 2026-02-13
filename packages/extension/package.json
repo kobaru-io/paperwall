@@ -1,0 +1,26 @@
+{
+  "name": "@paperwall/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Paperwall browser extension - micropayment wallet for the web",
+  "license": "GPL-3.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsx build.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.300",
+    "@x402/core": "^2.3.1",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.3",
+    "viem": "^2.43.5",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@x402/evm": "^2.3.1",
+    "@x402/fetch": "^2.3.0"
+  }
+}

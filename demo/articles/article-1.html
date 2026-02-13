@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Rise of Micropayments: How Blockchain is Reshaping Digital Publishing - The Daily Paper</title>
+  <meta name="description" content="A new wave of payment protocols promises to finally solve the internet's monetization problem, giving publishers a viable alternative to advertising.">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- Site Header -->
+  <header class="site-header" role="banner">
+    <div class="site-header__inner">
+      <a href="../index.html" class="site-header__brand" aria-label="The Daily Paper - Homepage">
+        <span class="site-header__title">The Daily Paper</span>
+        <span class="site-header__tagline">Independent Journalism</span>
+      </a>
+      <time class="site-header__date" datetime="2026-02-11">Wednesday, February 11, 2026</time>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="site-nav" aria-label="Main navigation">
+    <ul class="site-nav__list" role="list">
+      <li><a href="../index.html" class="site-nav__link">Home</a></li>
+      <li><a href="#" class="site-nav__link" aria-current="page">Technology</a></li>
+      <li><a href="#" class="site-nav__link">Finance</a></li>
+      <li><a href="#" class="site-nav__link">Science</a></li>
+      <li><a href="#" class="site-nav__link">Opinion</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main id="main-content" class="site-main">
+
+    <a href="../index.html" class="back-link">
+      <span class="back-link__arrow" aria-hidden="true">&larr;</span>
+      Back to Home
+    </a>
+
+    <!-- Thank You Banner (hidden until payment) -->
+    <div class="paperwall-thankyou" role="status" aria-hidden="true" id="thankyou-banner">
+      <p class="paperwall-thankyou__heading">Thank you for your support!</p>
+      <p class="paperwall-thankyou__text">
+        Your micropayment has been processed. Ads have been removed from this page.
+      </p>
+    </div>
+
+    <!-- Banner Ad -->
+    <aside class="paperwall-ad paperwall-ad--banner" role="complementary" aria-label="Advertisement banner">
+      <span class="paperwall-ad__label">Advertisement</span>
+      <div class="paperwall-ad__content">
+        <strong>CloudSync Pro &mdash; Enterprise File Storage</strong>
+        Secure, scalable, and fast. Try free for 30 days.
+      </div>
+    </aside>
+
+    <div class="article-layout">
+
+      <article class="article-content">
+
+        <header class="article-header">
+          <span class="article-header__category">Technology</span>
+          <h1 class="article-header__title">The Rise of Micropayments: How Blockchain is Reshaping Digital Publishing</h1>
+          <div class="article-header__meta">
+            <span>By <strong>Sarah Chen</strong></span>
+            <span class="article-header__meta-divider" aria-hidden="true"></span>
+            <time datetime="2026-02-11">February 11, 2026</time>
+            <span class="article-header__meta-divider" aria-hidden="true"></span>
+            <span>8 min read</span>
+          </div>
+        </header>
+
+        <div class="article-body">
+          <p>
+            For as long as the commercial internet has existed, publishers have struggled with a
+            fundamental question: how do you get people to pay for content they expect to be free?
+            The advertising model that emerged in the late 1990s seemed like an elegant solution at
+            first &mdash; readers get free content, publishers get revenue, and advertisers get
+            eyeballs. But three decades later, the cracks in this model are impossible to ignore.
+          </p>
+
+          <p>
+            Ad blockers are installed on over 40% of browsers worldwide. Privacy regulations like
+            GDPR and the deprecation of third-party cookies have gutted the targeting capabilities
+            that made digital ads lucrative. Meanwhile, the rise of AI-generated content has flooded
+            the web with low-quality pages designed solely to farm ad impressions, further eroding
+            trust in the ecosystem.
+          </p>
+
+          <h2>The Micropayment Thesis</h2>
+
+          <p>
+            The idea of micropayments is nearly as old as the web itself. In 1996, Tim Berners-Lee
+            proposed HTTP status code 402 &mdash; "Payment Required" &mdash; as a placeholder for
+            future online payment systems. The thesis was simple: if you could charge a fraction of
+            a cent per page view, the economics of content creation would fundamentally change.
+          </p>
+
+          <blockquote>
+            "The reason micropayments never worked wasn't that people didn't want to pay.
+            It was that the transaction costs were higher than the payments themselves."
+            &mdash; Dr. Anna Lehmann, MIT Media Lab
+          </blockquote>
+
+          <p>
+            Traditional payment rails make sub-dollar transactions economically impossible. Credit
+            card processors charge a minimum of $0.30 per transaction, which means a $0.01
+            micropayment would cost the merchant 30x the revenue. Even modern fintech solutions like
+            Stripe have minimum transaction thresholds that exclude true micropayments.
+          </p>
+
+          <!-- Inline Ad -->
+          <aside class="paperwall-ad paperwall-ad--inline" role="complementary" aria-label="Advertisement inline">
+            <span class="paperwall-ad__label">Advertisement</span>
+            <div class="paperwall-ad__content">
+              <strong>DevTools Premium &mdash; Debug Faster</strong>
+              The performance profiler trusted by 50,000 developers. Start your trial.
+            </div>
+          </aside>
+
+          <h2>Blockchain Changes the Calculus</h2>
+
+          <p>
+            This is where blockchain technology enters the picture &mdash; not as a speculative
+            asset class, but as infrastructure for value transfer. Layer-2 networks and application-specific
+            chains have reduced transaction costs to fractions of a cent, and in some cases to zero.
+          </p>
+
+          <p>
+            The SKALE Network, for example, operates a model where gas fees are ultra-low at the
+            network level. Transactions on SKALE have ultra-low fees, making it possible
+            to process a one-cent payment without losing much of that cent to network fees. This
+            fundamentally changes the micropayment equation.
+          </p>
+
+          <h2>A New Protocol: x402</h2>
+
+          <p>
+            Building on this infrastructure, a new generation of protocols is emerging that finally
+            makes Berners-Lee's vision practical. The x402 protocol extends the original HTTP 402
+            concept with a standardized signal format that allows websites to declare their payment
+            requirements and browser extensions to automatically detect and fulfill them.
+          </p>
+
+          <p>
+            The flow is elegantly simple. A publisher embeds a small JavaScript snippet on their
+            page that emits a payment signal. A browser extension detects this signal, shows the
+            user the price (typically $0.01 to $0.10), and with a single click, executes an
+            on-chain payment using stablecoins. The entire process takes less than two seconds.
+          </p>
+
+          <h3>The Publisher Experience</h3>
+
+          <p>
+            For publishers, integration is minimal. A single script tag with a few configuration
+            attributes is all that's needed. The SDK handles signal emission, extension communication,
+            and payment verification. Publishers receive stablecoin payments directly to their wallet
+            with no intermediary taking a cut beyond the negligible network fees.
+          </p>
+
+          <h3>The Reader Experience</h3>
+
+          <p>
+            For readers, the experience is a browser extension that acts as a lightweight wallet.
+            Users deposit a small amount of USDC &mdash; say, $5 &mdash; and that balance is
+            gradually spent across the sites they visit. At a penny per article, $5 covers 500
+            articles. The extension shows a running balance and payment history, giving users
+            complete visibility into their spending.
+          </p>
+
+          <h2>The Road Ahead</h2>
+
+          <p>
+            Critics argue that micropayments face a psychological barrier: the "pain of paying"
+            that makes each transaction feel like a friction point. But proponents counter that
+            this friction is precisely what makes the model work &mdash; it creates a direct
+            value signal between readers and publishers, incentivizing quality over clickbait.
+          </p>
+
+          <p>
+            Whether micropayments will truly replace advertising remains to be seen. But for the
+            first time in the web's history, the technology exists to make them work at scale.
+            The question is no longer "can we do this?" but "will publishers and readers embrace
+            the change?"
+          </p>
+
+          <p>
+            The answer, like most things on the internet, will be determined not by technology
+            alone, but by the collective behavior of millions of individual choices. Each penny
+            spent is a vote for a different kind of web.
+          </p>
+        </div>
+
+      </article>
+
+      <!-- Sidebar -->
+      <aside class="article-sidebar" aria-label="Sidebar">
+        <div class="paperwall-ad paperwall-ad--sidebar" role="complementary" aria-label="Advertisement sidebar">
+          <span class="paperwall-ad__label">Advertisement</span>
+          <div class="paperwall-ad__content">
+            <strong>BlockSecure Wallet</strong>
+            The safest way to manage your digital assets. Multi-chain support, hardware key backup.
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="site-footer__inner">
+      <p class="site-footer__copy">
+        &copy; 2026 The Daily Paper. This is a demo site for
+        <strong>Paperwall</strong> &mdash; micropayment-powered ad-free browsing.
+      </p>
+      <a href="https://github.com/nicholasgriffintn/paperwall"
+         class="site-footer__badge"
+         target="_blank"
+         rel="noopener noreferrer">
+        Powered by Paperwall
+      </a>
+    </div>
+  </footer>
+
+  <!-- Paperwall SDK -->
+  <script src="../js/paperwall-sdk.js"
+    data-facilitator-url="https://gateway.kobaru.io"
+    data-pay-to="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7"
+    data-price="1000000"
+    data-network="eip155:324705682"
+    data-asset="0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"
+  ></script>
+
+  <!-- Paperwall: Ad removal on successful payment -->
+  <script>
+    (function () {
+      'use strict';
+
+      /**
+       * Hides all .paperwall-ad elements and shows the thank-you banner.
+       * Called when the Paperwall extension confirms a successful payment.
+       */
+      function removeAdsAndThank() {
+        var ads = document.querySelectorAll('.paperwall-ad');
+        for (var i = 0; i < ads.length; i++) {
+          ads[i].setAttribute('aria-hidden', 'true');
+        }
+
+        var banner = document.getElementById('thankyou-banner');
+        if (banner) {
+          banner.setAttribute('aria-hidden', 'false');
+          banner.style.display = 'block';
+        }
+      }
+
+      /**
+       * Listen for PAPERWALL_PAYMENT_RESULT messages from the extension
+       * (relayed through the SDK messaging layer).
+       */
+      window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type !== 'PAPERWALL_PAYMENT_RESULT') return;
+        if (!data.success) return;
+
+        removeAdsAndThank();
+      });
+
+      // SDK is auto-initialized by the <script> tag's data- attributes.
+      // The message listener above handles payment success callbacks.
+    })();
+  </script>
+
+</body>
+</html>

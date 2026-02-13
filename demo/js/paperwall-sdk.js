@@ -1,0 +1,1 @@
+../../packages/sdk/dist/index.iife.js

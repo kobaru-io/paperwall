@@ -1,0 +1,42 @@
+# -- Dependencies --
+node_modules/
+
+# -- Build output --
+dist/
+*.tsbuildinfo
+
+# -- Environment & secrets --
+.env
+.env.*
+!.env.test.example
+
+# -- Wallet & agent data --
+.paperwall/
+
+# -- Logs --
+*.log
+npm-debug.log*
+
+# -- Test artifacts --
+coverage/
+test_output*.txt
+
+# -- OS & editor --
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# -- Docker --
+.dockerignore
+
+# -- AI tooling --
+.claude/
+.ring/
+CLAUDE.md
+packages/*/CLAUDE.md
+
+# -- Misc --
+*.swp
+*.swo
+*~

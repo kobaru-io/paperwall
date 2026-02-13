@@ -1,0 +1,7 @@
+{
+  "name": "paperwall-demo",
+  "version": "0.1.0",
+  "description": "Demo website for Paperwall",
+  "type": "module",
+  "private": true
+}

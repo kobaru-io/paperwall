@@ -1,0 +1,26 @@
+services:
+  a2a-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PAPERWALL_PORT:-4000}:4000"
+    environment:
+      - PAPERWALL_PRIVATE_KEY=${PAPERWALL_PRIVATE_KEY}
+      - PAPERWALL_PORT=4000
+      - PAPERWALL_HOST=0.0.0.0
+      - PAPERWALL_NETWORK=${PAPERWALL_NETWORK:-eip155:324705682}
+      - PAPERWALL_AUTH_TTL=${PAPERWALL_AUTH_TTL:-300}
+      - PAPERWALL_ACCESS_KEYS=${PAPERWALL_ACCESS_KEYS:-}
+    volumes:
+      - paperwall-data:/app/.paperwall
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  paperwall-data:
