@@ -159,7 +159,7 @@ This means Paperwall works with any x402-compliant server (not just Paperwall pu
 
 ### Payment Cryptography
 
-- **EIP-712** typed data signing for `TransferWithAuthorization` (EIP-3009)
+- **EIP-712** typed data signing for `TransferWithAuthorization` (EIP-3009), matching the signing requirements of Coinbase's Agentic SDK.
 - **Random 32-byte nonce** per transaction (replay protection)
 - **5-minute validity window** (prevents stale signatures)
 - **USDC stablecoin** on SKALE (ultra-low fees, dollar-denominated)
@@ -167,7 +167,7 @@ This means Paperwall works with any x402-compliant server (not just Paperwall pu
 
 ### Security Posture
 
-- **Wallet encryption:** PBKDF2 (600k iterations, SHA-256) + AES-256-GCM, 32-byte salt, 12-byte IV
+- **Wallet encryption:** PBKDF2 (600k iterations, SHA-256) + AES-256-GCM, 32-byte salt, 12-byte IV. The Wallet module is designed as an abstract provider. This allows for a seamless swap between the LocalMachineProvider and the Coinbase CDP Provider without changing the fetch logic.  
 - **Key storage (extension):** chrome.storage.session with TRUSTED_CONTEXTS -- only service worker can access
 - **Key storage (agent):** ~/.paperwall/wallet.json with 0o600 file permissions
 - **Facilitator SSRF:** HTTPS-only, private IP blocklist (10.x, 172.x, 192.168.x, link-local, IPv6)
@@ -245,6 +245,12 @@ Paperwall integrates with three Google technologies:
 
 ---
 
+## Coinbase Integration
+
+- Coinbase AWAL: The Paperwall Agent CLI is architected to be CDP-Ready. The current implementation performs the foundational work required to transition from local machine-bound keys to the Coinbase Agentic Wallet (AWL) ecosystem.
+- By maintaining a strict JSON-RPC output format, the Paperwall CLI serves as the execution layer for AI agents (like Claude or Gemini) to interact with Coinbase's MPC-managed wallets. This allow users to pass a CDP_API_KEY to automatically bridge local budget checks with Coinbase’s enterprise-grade custody.
+
+---
 ## x402 Protocol Compliance
 
 Paperwall implements x402 at multiple levels:
