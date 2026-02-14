@@ -143,6 +143,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(' / .___/\\__,_/ .___/\\___/_/    |__/|__/\\__,_/_/_/   ');
   console.log('/_/         /_/                                     ');
   console.log('');
+  console.log(`  Paperwall Demo Server`);
   console.log(`  Local:   http://localhost:${PORT}`);
   console.log(`  Network: http://0.0.0.0:${PORT}`);
   console.log('');

@@ -2,7 +2,7 @@
 
 **SF Agentic Commerce x402 Hackathon | SKALE Labs**
 
-**Tracks:** Overall Best Agentic App | Best Integration of AP2
+
 
 ---
 
@@ -135,43 +135,27 @@ This means Paperwall works with any x402-compliant server (not just Paperwall pu
 
 ### Architecture at a Glance
 
-```
-Publisher Website              Chrome Extension              Agent CLI / A2A Server
-  SDK (IIFE, ~5KB)             Content Script                Commander.js CLI
-    |                            |        |                     |
-    emits <meta> signal -->    detector  bridge              payment-engine
-    postMessage bridge -->       |          |                    |
-                                 +--chrome.runtime--+          +-- HTTP 402 (@x402/fetch)
-                                 |                  |          +-- client mode (facilitator)
-                                 v                  v          +-- server mode (publisher)
-                            service worker    popup UI              |
-                              |                                budget enforcement (BigInt)
-                              +-- key-manager (PBKDF2+AES)         |
-                              +-- signer (EIP-712)             signer (EIP-712)
-                              +-- facilitator client               |
-                              +-- balance (eth_call)           A2A Server (Express)
-                              +-- history                        +-- AgentExecutor
-                                                                 +-- receipt-manager
-                                                                 +-- receipt-viewer
-                                                                 +-- access-gate (HMAC)
-                                                                 +-- agent-card (v0.3.0)
-                                                                 +-- agent-registry
+**Publisher Website** -- SDK (IIFE, ~5KB) emits x402 meta signal and postMessage bridge
 
-                              AI Agent Integration
-                                install.sh --> builds CLI, installs skill, wallet + budget
-                                SKILL.md  --> teaches Claude Code / Gemini CLI
-```
+**Chrome Extension** -- Content script detects signal, bridges to service worker via chrome.runtime
+- Service worker: key-manager (PBKDF2+AES), signer (EIP-712), facilitator client, balance (eth_call), history
+- Popup UI: wallet management, payment confirmation
+
+**Agent CLI / A2A Server** -- Commander.js CLI with payment-engine
+- Payment modes: HTTP 402 (@x402/fetch), client mode (facilitator), server mode (publisher)
+- Budget enforcement (BigInt), signer (EIP-712)
+- A2A Server (Express): AgentExecutor, receipt-manager, receipt-viewer, access-gate (HMAC), agent-card (v0.3.0)
+
+**AI Agent Integration** -- install.sh builds CLI, installs skill, sets up wallet + budget. SKILL.md teaches Claude Code / Gemini CLI
 
 ### Code Quality Signals
 
-| Metric                | Value                                                                                                                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test files            | 41 unit + 6 integration                                                                                                                                                          |
-| Test count            | 560+ across all packages                                                                                                                                                         |
-| TypeScript strictness | `strict: true`, `noUncheckedIndexedAccess`, `noPropertyAccessFromIndexSignature`                                                                                                 |
-| Zero `any`            | `unknown` + type narrowing throughout                                                                                                                                            |
-| Security              | PBKDF2 600k iterations + AES-256-GCM, SSRF protection, timing-safe auth, brute-force lockout                                                                                     |
-| Documentation         | 12 guides (6,200+ lines total): architecture, A2A server, developer, agent CLI, AI agent setup, publisher, user, FAQ, pricing economics, design decisions, roadmap, how-it-works |
+- **Test files:** 41 unit + 6 integration
+- **Test count:** 560+ across all packages
+- **TypeScript strictness:** strict: true, noUncheckedIndexedAccess, noPropertyAccessFromIndexSignature
+- **Zero any:** unknown + type narrowing throughout
+- **Security:** PBKDF2 600k iterations + AES-256-GCM, SSRF protection, timing-safe auth, brute-force lockout
+- **Documentation:** 12 guides (6,200+ lines total): architecture, A2A server, developer, agent CLI, AI agent setup, publisher, user, FAQ, pricing economics, design decisions, roadmap, how-it-works
 
 ### Payment Cryptography
 
@@ -183,17 +167,15 @@ Publisher Website              Chrome Extension              Agent CLI / A2A Ser
 
 ### Security Posture
 
-| Area                    | Implementation                                                                     |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| Wallet encryption       | PBKDF2 (600k iterations, SHA-256) + AES-256-GCM, 32-byte salt, 12-byte IV          |
-| Key storage (extension) | `chrome.storage.session` with `TRUSTED_CONTEXTS` -- only service worker can access |
-| Key storage (agent)     | `~/.paperwall/wallet.json` with `0o600` file permissions                           |
-| Facilitator SSRF        | HTTPS-only, private IP blocklist (10.x, 172.x, 192.168.x, link-local, IPv6)        |
-| Brute-force protection  | 5-attempt lockout, 5-minute cooldown                                               |
-| A2A access control      | HMAC-based timing-safe Bearer token comparison                                     |
-| Receipt viewer          | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, strict CSP             |
-| HTML output             | `escapeHtml()` on all user-supplied values                                         |
-| Password requirements   | 12+ characters, 3-of-4 character categories                                        |
+- **Wallet encryption:** PBKDF2 (600k iterations, SHA-256) + AES-256-GCM, 32-byte salt, 12-byte IV
+- **Key storage (extension):** chrome.storage.session with TRUSTED_CONTEXTS -- only service worker can access
+- **Key storage (agent):** ~/.paperwall/wallet.json with 0o600 file permissions
+- **Facilitator SSRF:** HTTPS-only, private IP blocklist (10.x, 172.x, 192.168.x, link-local, IPv6)
+- **Brute-force protection:** 5-attempt lockout, 5-minute cooldown
+- **A2A access control:** HMAC-based timing-safe Bearer token comparison
+- **Receipt viewer:** X-Frame-Options: DENY, X-Content-Type-Options: nosniff, strict CSP
+- **HTML output:** escapeHtml() on all user-supplied values
+- **Password requirements:** 12+ characters, 3-of-4 character categories
 
 ---
 
@@ -243,12 +225,10 @@ Other agents can discover this card, send a JSON-RPC `message/send` request with
 
 Paperwall is deeply built on SKALE's unique properties:
 
-| SKALE Feature         | How Paperwall Uses It                                              |
-| --------------------- | ------------------------------------------------------------------ |
-| **Zero gas fees**     | Makes $0.01 payments viable (100% of payment goes to publisher)    |
-| **EVM compatibility** | Standard USDC contract, `transferWithAuthorization` (EIP-3009)     |
-| **Fast finality**     | Payments settle in seconds, not minutes                            |
-| **Testnet + Mainnet** | Both networks configured (`eip155:324705682`, `eip155:1187947933`) |
+- **Zero gas fees:** Makes $0.01 payments viable (100% of payment goes to publisher)
+- **EVM compatibility:** Standard USDC contract, transferWithAuthorization (EIP-3009)
+- **Fast finality:** Payments settle in seconds, not minutes
+- **Testnet + Mainnet:** Both networks configured (eip155:324705682, eip155:1187947933)
 
 Without SKALE's ultra-low fees, Paperwall's entire economic thesis collapses. A $0.01 payment on Ethereum mainnet would cost $1-50 in gas. On Optimism/Arbitrum, $0.01-0.50. On SKALE, nearly negligible. This is the fundamental enabler.
 
@@ -258,12 +238,10 @@ Without SKALE's ultra-low fees, Paperwall's entire economic thesis collapses. A 
 
 Paperwall integrates with three Google technologies:
 
-| Google Technology                | How Paperwall Uses It                                                                                                         |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Gemini CLI**                   | Installable skill (`bash install.sh gemini`) -- Gemini can autonomously pay for paywalled content                             |
-| **A2A Protocol (v0.3.0)**        | A2A server built on `@a2a-js/sdk` with agent card discovery, JSON-RPC 2.0, and task lifecycle                                 |
-| **AP2 (Agent Payment Protocol)** | Full receipt lifecycle (intent → authorization → settled/declined) with structured audit trail                                |
-| **Cloud Run**                    | Docker image (`node:20-slim`, multi-stage build) deploys directly to Cloud Run -- `docker build -t paperwall packages/agent/` |
+- **Gemini CLI:** Installable skill (bash install.sh gemini) -- Gemini can autonomously pay for paywalled content
+- **A2A Protocol (v0.3.0):** A2A server built on @a2a-js/sdk with agent card discovery, JSON-RPC 2.0, and task lifecycle
+- **AP2 (Agent Payment Protocol):** Full receipt lifecycle (intent, authorization, settled/declined) with structured audit trail
+- **Cloud Run:** Docker image (node:20-slim, multi-stage build) deploys directly to Cloud Run
 
 ---
 
