@@ -45,7 +45,7 @@ export interface VerificationInfo {
 }
 
 export interface RiskSignals {
-  readonly requestSource: 'cli' | 'a2a-rpc' | 'direct-api';
+  readonly requestSource: 'cli' | 'a2a-rpc' | 'direct-api' | 'mcp';
   readonly timestamp: string;
   readonly agentFirstSeen: string | null;
   readonly agentRequestCount: number;

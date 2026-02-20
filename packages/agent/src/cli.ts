@@ -5,6 +5,7 @@ import { getRecent, getTodayTotal, getLifetimeTotal } from './history.js';
 import { readJsonlFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
 import { fetchWithPayment } from './payment-engine.js';
+import { promptPassword } from './prompt.js';
 
 import type { HistoryEntry } from './history.js';
 
@@ -27,9 +28,16 @@ export function buildProgram(): Command {
     .description('Generate a new machine-bound encrypted wallet')
     .option('-n, --network <caip2>', 'Default network (CAIP-2)', 'eip155:324705682')
     .option('-f, --force', 'Overwrite existing wallet')
-    .action(async (options: { network: string; force?: boolean }) => {
+    .option('-p, --password <string>', 'Password for wallet encryption')
+    .option('-i, --interactive-password', 'Prompt for password interactively')
+    .action(async (options: { network: string; force?: boolean; password?: string; interactivePassword?: boolean }) => {
       try {
-        const result = await createWallet({ network: options.network, force: options.force });
+        let password = options.password;
+        if (options.interactivePassword) {
+          password = await promptPassword('Enter new wallet password: ');
+        }
+
+        const result = await createWallet({ network: options.network, force: options.force, password });
         outputJson({
           ok: true,
           address: result.address,
@@ -48,9 +56,16 @@ export function buildProgram(): Command {
     .requiredOption('-k, --key <hex>', 'Private key (0x-prefixed hex)')
     .option('-n, --network <caip2>', 'Default network (CAIP-2)', 'eip155:324705682')
     .option('-f, --force', 'Overwrite existing wallet')
-    .action(async (options: { key: string; network: string; force?: boolean }) => {
+    .option('-p, --password <string>', 'Password for wallet encryption')
+    .option('-i, --interactive-password', 'Prompt for password interactively')
+    .action(async (options: { key: string; network: string; force?: boolean; password?: string; interactivePassword?: boolean }) => {
       try {
-        const result = await importWallet(options.key, { network: options.network, force: options.force });
+        let password = options.password;
+        if (options.interactivePassword) {
+          password = await promptPassword('Enter new wallet password: ');
+        }
+
+        const result = await importWallet(options.key, { network: options.network, force: options.force, password });
         outputJson({
           ok: true,
           address: result.address,
@@ -170,14 +185,14 @@ export function buildProgram(): Command {
         // Compute remaining for daily and total (if configured)
         const dailyRemaining = budgetConfig.dailyMax
           ? smallestToUsdc(
-              (BigInt(usdcToSmallest(budgetConfig.dailyMax)) - BigInt(todaySmallest)).toString(),
-            )
+            (BigInt(usdcToSmallest(budgetConfig.dailyMax)) - BigInt(todaySmallest)).toString(),
+          )
           : undefined;
 
         const totalRemaining = budgetConfig.totalMax
           ? smallestToUsdc(
-              (BigInt(usdcToSmallest(budgetConfig.totalMax)) - BigInt(lifetimeSmallest)).toString(),
-            )
+            (BigInt(usdcToSmallest(budgetConfig.totalMax)) - BigInt(lifetimeSmallest)).toString(),
+          )
           : undefined;
 
         outputJson({
@@ -335,6 +350,42 @@ export function buildProgram(): Command {
             outputError(
               'server_error',
               `Failed to start server: ${message}`,
+              1,
+            );
+          }
+        }
+      },
+    );
+
+  // ── MCP server command ──────────────────────────────────────
+
+  program
+    .command('mcp')
+    .description('Start MCP server for AI assistant integration (stdio transport)')
+    .option('-n, --network <caip2>', 'Blockchain network (CAIP-2)')
+    .action(
+      async (options: { network?: string }) => {
+        try {
+          const { resolvePrivateKey } = await import('./wallet.js');
+          await resolvePrivateKey();
+
+          if (options.network) {
+            const { getNetwork } = await import('./networks.js');
+            getNetwork(options.network); // validates; throws if unsupported
+            process.env['PAPERWALL_NETWORK'] = options.network;
+          }
+
+          const { startMcpServer } = await import('./mcp/index.js');
+          await startMcpServer();
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          if (message.includes('No wallet')) {
+            outputError('no_wallet', message, 3);
+          } else {
+            outputError(
+              'mcp_error',
+              `Failed to start MCP server: ${message}`,
               1,
             );
           }

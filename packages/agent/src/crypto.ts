@@ -26,10 +26,11 @@ export function getMachineIdentity(): string {
 
 export async function encryptKey(
   privateKey: string,
+  password?: string,
 ): Promise<EncryptedKey> {
   const salt = crypto.getRandomValues(new Uint8Array(32));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const derivedKey = await deriveKey(salt);
+  const derivedKey = await deriveKey(salt, password);
 
   const encoder = new TextEncoder();
   const encrypted = await crypto.subtle.encrypt(
@@ -49,12 +50,13 @@ export async function decryptKey(
   encryptedKeyHex: string,
   keySaltHex: string,
   keyIvHex: string,
+  password?: string,
 ): Promise<string> {
   const encryptedData = Buffer.from(encryptedKeyHex, 'hex');
   const salt = Buffer.from(keySaltHex, 'hex');
   const iv = Buffer.from(keyIvHex, 'hex');
 
-  const derivedKey = await deriveKey(new Uint8Array(salt));
+  const derivedKey = await deriveKey(new Uint8Array(salt), password);
 
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: new Uint8Array(iv) },
@@ -70,11 +72,12 @@ export async function decryptKey(
 
 async function deriveKey(
   salt: Uint8Array,
+  password?: string,
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(getMachineIdentity()),
+    encoder.encode(password ?? getMachineIdentity()),
     'PBKDF2',
     false,
     ['deriveKey'],

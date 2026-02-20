@@ -3,8 +3,9 @@
 The Paperwall Agent CLI is a command-line tool that lets AI agents (and humans) pay for access to paywalled web content using cryptocurrency micropayments. It works headlessly -- no browser required.
 
 > **New here?** Read [How Paperwall works](how-it-works.md) for a plain-language overview.
-> **Setting up an AI agent?** See the [AI agent setup guide](ai-agent-setup.md) for Claude Code and Gemini CLI.
-> **Running a server?** See the [A2A server guide](a2a-server-guide.md) for the Agent-to-Agent protocol server.
+> **Setting up MCP?** See the [MCP server guide](mcp-server-guide.md) for Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop.
+> **Setting up a skill?** See the [AI agent setup guide](ai-agent-setup.md) for Gemini CLI and skill-based integration.
+> **Running an A2A server?** See the [A2A server guide](a2a-server-guide.md) for the Agent-to-Agent protocol server.
 
 ---
 

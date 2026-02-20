@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { privateKeyToAccount } from 'viem/accounts';
 import { generatePrivateKey, encryptKey, decryptKey } from './crypto.js';
+import { promptPassword } from './prompt.js';
 import {
   getConfigDir,
   readJsonFile,
@@ -23,6 +24,7 @@ export interface WalletFile {
   readonly keySalt: string;
   readonly keyIv: string;
   readonly networkId: string;
+  readonly cryptoMode?: 'machine' | 'password';
 }
 
 export interface BalanceInfo {
@@ -36,6 +38,7 @@ export interface BalanceInfo {
 export interface CreateWalletOptions {
   readonly network?: string;
   readonly force?: boolean;
+  readonly password?: string;
 }
 
 export async function createWallet(
@@ -55,7 +58,7 @@ export async function createWallet(
   const rawKey = generatePrivateKey();
   const hexKey = `0x${rawKey}` as `0x${string}`;
   const account = privateKeyToAccount(hexKey);
-  const encrypted = await encryptKey(rawKey);
+  const encrypted = await encryptKey(rawKey, opts.password);
 
   const walletData: WalletFile = {
     address: account.address,
@@ -63,6 +66,7 @@ export async function createWallet(
     keySalt: encrypted.keySalt,
     keyIv: encrypted.keyIv,
     networkId,
+    cryptoMode: opts.password ? 'password' : 'machine',
   };
 
   writeJsonFile(WALLET_FILENAME, walletData);
@@ -79,6 +83,7 @@ export async function createWallet(
 export interface ImportWalletOptions {
   readonly network?: string;
   readonly force?: boolean;
+  readonly password?: string;
 }
 
 export async function importWallet(
@@ -109,7 +114,7 @@ export async function importWallet(
 
   const hexKey = `0x${rawKey}` as `0x${string}`;
   const account = privateKeyToAccount(hexKey);
-  const encrypted = await encryptKey(rawKey);
+  const encrypted = await encryptKey(rawKey, opts.password);
 
   const walletData: WalletFile = {
     address: account.address,
@@ -117,6 +122,7 @@ export async function importWallet(
     keySalt: encrypted.keySalt,
     keyIv: encrypted.keyIv,
     networkId,
+    cryptoMode: opts.password ? 'password' : 'machine',
   };
 
   writeJsonFile(WALLET_FILENAME, walletData);
@@ -156,13 +162,22 @@ export async function resolvePrivateKey(): Promise<`0x${string}`> {
     return envKey as `0x${string}`;
   }
 
-  // Priority 2: Machine-bound encrypted wallet file
+  // Priority 2: Local encrypted wallet file
   const wallet = readJsonFile<WalletFile>(WALLET_FILENAME);
   if (wallet) {
+    let password = undefined;
+    if (wallet.cryptoMode === 'password') {
+      password = process.env['PAPERWALL_WALLET_PASSWORD'];
+      if (!password) {
+        password = await promptPassword('Wallet password: ');
+      }
+    }
+
     const rawKey = await decryptKey(
       wallet.encryptedKey,
       wallet.keySalt,
       wallet.keyIv,
+      password,
     );
     return `0x${rawKey}`;
   }

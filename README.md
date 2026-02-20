@@ -119,9 +119,15 @@ You want an ad-free web and don't mind paying a few cents per article—all in a
 
 ### I'm an AI agent user -- I want Claude or Gemini to access paywalled content
 
-You use Claude Code, Gemini CLI, or another AI agent and want it to pay for paywalled articles on your behalf.
+You use Claude Code, Gemini CLI, Cursor, Antigravity, or another AI agent and want it to pay for paywalled articles on your behalf.
 
-**[AI agent setup](docs/ai-agent-setup.md)** -- Install the skill, configure a wallet and budget, start prompting.
+```bash
+curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
+```
+
+**[MCP server guide](docs/mcp-server-guide.md)** -- Recommended. Native tool calls and live resources via MCP protocol.
+
+**[AI agent setup](docs/ai-agent-setup.md)** -- Alternative skill-based setup for clients without MCP support.
 
 ### I'm a developer using the CLI agent or A2A server
 
@@ -184,7 +190,7 @@ See the full **[publisher guide](docs/publisher-guide.md)** for configuration de
 ### For developers
 
 ```bash
-git clone https://github.com/kobaru/paperwall.git
+git clone https://github.com/kobaru-io/paperwall.git
 cd paperwall
 npm install
 npm run build

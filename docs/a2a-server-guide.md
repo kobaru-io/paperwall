@@ -1144,7 +1144,8 @@ if (data?.ok) {
 ## Related documentation
 
 - [How Paperwall works](how-it-works.md) -- Plain-language overview of paywalls and payment flow
-- [AI agent setup](ai-agent-setup.md) -- Set up Claude Code or Gemini CLI with Paperwall
+- [MCP server guide](mcp-server-guide.md) -- MCP integration for Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop
+- [AI agent setup](ai-agent-setup.md) -- Skill-based setup for Gemini CLI and Claude Code
 - [Agent CLI guide](agent-cli-guide.md) -- Full CLI reference (wallet, budget, fetch, history commands)
 - [Architecture deep dive](architecture.md) -- Full system architecture, payment flows, and security model
 - [Developer guide](developer-guide.md) -- Build, test, and contribute to Paperwall

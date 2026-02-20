@@ -36,6 +36,9 @@ Thumbs.db
 CLAUDE.md
 packages/*/CLAUDE.md
 
+# -- Pre-dev research --
+docs/pre-dev/
+
 # -- Misc --
 *.swp
 *.swo

@@ -1,25 +1,46 @@
 # AI agent setup
 
-Give your AI agent the ability to pay for paywalled content. The Paperwall agent skill lets Claude Code, Gemini CLI, and other AI agents fetch articles behind paywalls using cryptocurrency micropayments -- no browser needed.
+Give your AI agent the ability to pay for paywalled content. Paperwall integrates with AI assistants through two methods: an MCP server (recommended) or an agent skill. Both let agents fetch articles behind paywalls using cryptocurrency micropayments -- no browser needed.
 
 ---
 
-## Quick setup
+## Choose your integration method
 
-Clone the repository and run the installer for your AI agent:
+**[MCP server](mcp-server-guide.md) (Recommended)** -- The AI calls Paperwall tools directly via the MCP protocol. Richer integration with native tool calls and live resources (wallet balance, budget status, payment history). Works with Claude Code, Cursor, Windsurf, Claude Desktop, Codex, OpenCode, Gemini CLI, and any MCP-compatible client.
+
+**Agent skill (this page)** -- The AI reads a skill file and shells out to the `paperwall` CLI. Use this for clients without MCP support, or if you prefer a simpler CLI-based integration.
+
+If your client supports MCP, see the **[MCP server guide](mcp-server-guide.md)** instead.
+
+---
+
+## Quick setup (skill-based)
+
+Run the one-liner installer:
+
+**macOS / Linux:**
 
 ```bash
-git clone https://github.com/kobaru/paperwall.git
-cd paperwall
-
-# For Claude Code
-bash packages/agent/install.sh claude
-
-# For Gemini CLI
-bash packages/agent/install.sh gemini
+curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
 ```
 
-The installer walks you through four steps: building the CLI, installing the skill, setting up a wallet, and configuring a budget. Each step is described below.
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.ps1 | iex
+```
+
+**From source** (if you already cloned the repo):
+
+```bash
+git clone https://github.com/kobaru-io/paperwall.git
+cd paperwall
+npm install
+bash packages/agent/install.sh       # macOS / Linux
+# pwsh packages/agent/install.ps1    # Windows
+```
+
+The installer walks you through building the CLI, choosing your AI client and integration method (MCP or skill), setting up a wallet, and configuring a budget. The steps below describe the skill-based path.
 
 ---
 
@@ -27,16 +48,25 @@ The installer walks you through four steps: building the CLI, installing the ski
 
 ### Step 1: Build and install the CLI
 
-The installer builds the `paperwall` binary from source and symlinks it to `~/.local/bin/paperwall`. No `sudo` or global npm permissions are needed. Because it's a symlink, the CLI stays in sync with the built source. After this step, `paperwall` is available as a command (as long as `~/.local/bin` is on your PATH).
+The installer builds the `paperwall` binary from source and makes it available as a command:
 
-### Step 2: Install the agent skill
+- **macOS / Linux:** Symlinks to `~/.local/bin/paperwall`. Because it's a symlink, the CLI stays in sync with the built source. Ensure `~/.local/bin` is on your PATH.
+- **Windows:** Creates a `paperwall.cmd` wrapper in `%USERPROFILE%\.local\bin\`. Add this directory to your PATH if it isn't already.
 
-The installer creates a symlink from your AI agent's skill directory to the skill definition inside the repo:
+No `sudo`, administrator privileges, or global npm permissions are needed.
 
-- **Claude Code:** `~/.claude/skills/paperwall` → `packages/agent/skills/paperwall/`
+### Step 2: Choose your AI client
+
+The installer shows a single list of all supported clients and integration methods.
+
+**MCP options (recommended):** Writes the server configuration to your client's config file (Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop, Gemini CLI, or Antigravity). See the [MCP server guide](mcp-server-guide.md) for details.
+
+**Skill options:** Links your AI agent's skill directory to the skill definition inside the repo:
+
 - **Gemini CLI:** `~/.gemini/skills/paperwall` → `packages/agent/skills/paperwall/`
+- **Claude Code:** `~/.claude/skills/paperwall` → `packages/agent/skills/paperwall/`
 
-Because it's a symlink, the skill stays up to date whenever you pull the latest code. The skill file teaches the AI agent when and how to invoke the `paperwall` CLI -- no special API integration is needed.
+On macOS/Linux the installer creates a symlink; on Windows it creates a directory junction. Either way, the skill stays up to date whenever you pull the latest code. The skill file teaches the AI agent when and how to invoke the `paperwall` CLI -- no special API integration is needed.
 
 ### Step 3: Wallet setup
 
@@ -103,15 +133,15 @@ For direct CLI usage outside of AI agents (scripts, CI pipelines, etc.), see the
 
 ### Gemini CLI does not call the agent
 
-- Ensure the agent CLI is in your PATH (`which paperwall`)
-- Verify the skill symlink exists: `ls -la ~/.gemini/skills/paperwall`
-- If missing, re-run the installer: `bash packages/agent/install.sh gemini`
+- Ensure the agent CLI is in your PATH (`which paperwall` on macOS/Linux, `Get-Command paperwall` on Windows)
+- Verify the skill link exists: `ls -la ~/.gemini/skills/paperwall` (or check `%USERPROFILE%\.gemini\skills\paperwall` on Windows)
+- If missing, re-run the installer and choose Gemini CLI
 - Check Gemini CLI logs for tool discovery messages
 
 ### Claude Code does not call the agent
 
-- Verify the skill symlink exists: `ls -la ~/.claude/skills/paperwall`
-- If missing, re-run the installer: `bash packages/agent/install.sh claude`
+- Verify the skill link exists: `ls -la ~/.claude/skills/paperwall` (or check `%USERPROFILE%\.claude\skills\paperwall` on Windows)
+- If missing, re-run the installer and choose Claude Code
 - Try mentioning "paperwall" explicitly in your prompt
 
 ### "No wallet configured" (exit code 3)
@@ -125,6 +155,7 @@ The agent does not have a wallet. Either:
 
 ## Related documentation
 
+- [MCP server guide](mcp-server-guide.md) -- MCP integration for Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop, Gemini CLI, Antigravity
 - [How Paperwall works](how-it-works.md) -- Conceptual overview of paywalls and payment flow
 - [Agent CLI guide](agent-cli-guide.md) -- Full CLI reference (wallet, budget, fetch, history commands)
 - [A2A server guide](a2a-server-guide.md) -- Run Paperwall as a server for other AI agents
