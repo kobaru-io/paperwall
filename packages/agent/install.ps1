@@ -170,73 +170,53 @@ function Write-OpenCodeConfig {
     }
 }
 
-function Write-GeminiMd {
-    $Dest = Join-Path $env:USERPROFILE '.gemini' 'GEMINI.md'
+function Write-InstructionsBlock {
+    param(
+        [string]$Dest,
+        [string]$Label
+    )
+
     $DestDir = Split-Path -Parent $Dest
     if (-not (Test-Path $DestDir)) {
         New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
     }
 
-    $Marker = '## Paperwall'
-    if ((Test-Path $Dest) -and (Get-Content -Raw $Dest).Contains($Marker)) {
-        Write-Host 'GEMINI.md already contains Paperwall instructions — skipping.'
-        return
-    }
+    $StartMarker = '<!-- paperwall-start -->'
+    $EndMarker = '<!-- paperwall-end -->'
 
-    $Snippet = @'
-
+    $Block = @"
+<!-- paperwall-start -->
 ## Paperwall
 
-When asked to fetch, read, or access a URL, use Paperwall's `fetch_url` MCP tool instead of the built-in `web_fetch`. Paperwall handles paywalled content by automatically detecting and paying micropayments (USDC on SKALE network). Use Paperwall's `set_budget` tool to manage spending limits.
-'@
-    Add-Content -Path $Dest -Value $Snippet -Encoding UTF8
-    Write-Host "Appended Paperwall instructions to $Dest"
+When asked to fetch, read, or access a URL, use Paperwall's ``fetch_url`` MCP tool instead of any built-in web fetch. Paperwall handles paywalled content by automatically detecting and paying micropayments (USDC on SKALE network). Use Paperwall's ``set_budget`` tool to manage spending limits.
+<!-- paperwall-end -->
+"@
+
+    if ((Test-Path $Dest) -and (Get-Content -Raw $Dest).Contains($StartMarker)) {
+        # Replace existing block between markers
+        $Content = Get-Content -Raw $Dest
+        $Pattern = '(?s)<!-- paperwall-start -->.*?<!-- paperwall-end -->'
+        $Content = [regex]::Replace($Content, $Pattern, $Block)
+        Set-Content -Path $Dest -Value $Content -NoNewline -Encoding UTF8
+        Write-Host "Updated Paperwall instructions in ${Label}: $Dest"
+    }
+    else {
+        # Append new block
+        Add-Content -Path $Dest -Value "`n$Block" -Encoding UTF8
+        Write-Host "Added Paperwall instructions to ${Label}: $Dest"
+    }
+}
+
+function Write-GeminiMd {
+    Write-InstructionsBlock (Join-Path $env:USERPROFILE '.gemini' 'GEMINI.md') 'GEMINI.md'
 }
 
 function Write-ClaudeMd {
-    $Dest = Join-Path $env:USERPROFILE '.claude' 'CLAUDE.md'
-    $DestDir = Split-Path -Parent $Dest
-    if (-not (Test-Path $DestDir)) {
-        New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
-    }
-
-    $Marker = '## Paperwall'
-    if ((Test-Path $Dest) -and (Get-Content -Raw $Dest).Contains($Marker)) {
-        Write-Host 'CLAUDE.md already contains Paperwall instructions — skipping.'
-        return
-    }
-
-    $Snippet = @'
-
-## Paperwall
-
-When asked to fetch, read, or access a URL that may be paywalled, use Paperwall's `fetch_url` MCP tool. Paperwall handles paywalled content by automatically detecting and paying micropayments (USDC on SKALE network). Use Paperwall's `set_budget` tool to manage spending limits.
-'@
-    Add-Content -Path $Dest -Value $Snippet -Encoding UTF8
-    Write-Host "Appended Paperwall instructions to $Dest"
+    Write-InstructionsBlock (Join-Path $env:USERPROFILE '.claude' 'CLAUDE.md') 'CLAUDE.md'
 }
 
 function Write-CodexAgentsMd {
-    $Dest = Join-Path $env:USERPROFILE '.codex' 'AGENTS.md'
-    $DestDir = Split-Path -Parent $Dest
-    if (-not (Test-Path $DestDir)) {
-        New-Item -ItemType Directory -Path $DestDir -Force | Out-Null
-    }
-
-    $Marker = '## Paperwall'
-    if ((Test-Path $Dest) -and (Get-Content -Raw $Dest).Contains($Marker)) {
-        Write-Host 'AGENTS.md already contains Paperwall instructions — skipping.'
-        return
-    }
-
-    $Snippet = @'
-
-## Paperwall
-
-When asked to fetch, read, or access a URL that may be paywalled, use Paperwall's `fetch_url` MCP tool. Paperwall handles paywalled content by automatically detecting and paying micropayments (USDC on SKALE network). Use Paperwall's `set_budget` tool to manage spending limits.
-'@
-    Add-Content -Path $Dest -Value $Snippet -Encoding UTF8
-    Write-Host "Appended Paperwall instructions to $Dest"
+    Write-InstructionsBlock (Join-Path $env:USERPROFILE '.codex' 'AGENTS.md') 'AGENTS.md'
 }
 
 function Install-Skill {

@@ -597,6 +597,8 @@ The installer:
 
 For clients with existing config files, the Unix installer merges the Paperwall entry using `jq` (JSON clients) or appends the TOML block (Codex). If `jq` is not installed and the config file already exists, it prints the snippet for manual copy-paste. The Windows installer uses PowerShell's native `ConvertFrom-Json`/`ConvertTo-Json` -- no external tools needed.
 
+**Re-running the installer is safe.** The installer is idempotent -- running it again updates your configuration rather than duplicating it. MCP configs are merged (existing entries are overwritten), and instruction files use `<!-- paperwall-start -->` / `<!-- paperwall-end -->` markers to replace the Paperwall section in place. This means future installs can update the instructions (e.g., when new networks or tokens are supported) without leaving stale content behind.
+
 ---
 
 ## Troubleshooting
