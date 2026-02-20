@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import * as os from 'node:os';
+import { KeyDerivationEngine } from './key-derivation-engine.js';
 
 // -- Types ---
 
@@ -12,6 +13,10 @@ export interface EncryptedKey {
 // -- Constants ---
 
 const FIXED_SALT = 'paperwall-agent-machine-bound-v1';
+
+// -- Internal ---
+
+const engine = new KeyDerivationEngine();
 
 // -- Public API ---
 
@@ -26,23 +31,22 @@ export function getMachineIdentity(): string {
 
 export async function encryptKey(
   privateKey: string,
-  password?: string,
 ): Promise<EncryptedKey> {
   const salt = crypto.getRandomValues(new Uint8Array(32));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const derivedKey = await deriveKey(salt, password);
+  const plaintext = new TextEncoder().encode(privateKey);
 
-  const encoder = new TextEncoder();
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    derivedKey,
-    encoder.encode(privateKey),
-  );
+  const key = await engine.deriveKey(salt, getMachineIdentity());
+  const encrypted = await engine.encrypt(plaintext, key);
+
+  // Combine ciphertext + authTag for backward-compatible hex format
+  const combined = new Uint8Array(encrypted.ciphertext.length + encrypted.authTag.length);
+  combined.set(encrypted.ciphertext, 0);
+  combined.set(encrypted.authTag, encrypted.ciphertext.length);
 
   return {
-    encryptedKey: Buffer.from(encrypted).toString('hex'),
+    encryptedKey: Buffer.from(combined).toString('hex'),
     keySalt: Buffer.from(salt).toString('hex'),
-    keyIv: Buffer.from(iv).toString('hex'),
+    keyIv: Buffer.from(encrypted.iv).toString('hex'),
   };
 }
 
@@ -50,49 +54,18 @@ export async function decryptKey(
   encryptedKeyHex: string,
   keySaltHex: string,
   keyIvHex: string,
-  password?: string,
 ): Promise<string> {
   const encryptedData = Buffer.from(encryptedKeyHex, 'hex');
-  const salt = Buffer.from(keySaltHex, 'hex');
-  const iv = Buffer.from(keyIvHex, 'hex');
+  const salt = new Uint8Array(Buffer.from(keySaltHex, 'hex'));
+  const iv = new Uint8Array(Buffer.from(keyIvHex, 'hex'));
 
-  const derivedKey = await deriveKey(new Uint8Array(salt), password);
+  // Split combined data into ciphertext + authTag (last 16 bytes)
+  const AUTH_TAG_LENGTH = 16;
+  const ciphertext = new Uint8Array(encryptedData.slice(0, encryptedData.length - AUTH_TAG_LENGTH));
+  const authTag = new Uint8Array(encryptedData.slice(-AUTH_TAG_LENGTH));
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: new Uint8Array(iv) },
-    derivedKey,
-    new Uint8Array(encryptedData),
-  );
+  const key = await engine.deriveKey(salt, getMachineIdentity());
+  const decrypted = await engine.decrypt({ ciphertext, iv, authTag }, key);
 
-  const decoder = new TextDecoder();
-  return decoder.decode(decrypted);
-}
-
-// -- Internal Helpers ---
-
-async function deriveKey(
-  salt: Uint8Array,
-  password?: string,
-): Promise<CryptoKey> {
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password ?? getMachineIdentity()),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
-
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: salt as unknown as ArrayBuffer,
-      iterations: 600_000,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
+  return new TextDecoder().decode(decrypted);
 }

@@ -1,17 +1,10 @@
 // -- Types ---
 
 /**
- * Represents a CryptoKey suitable for AES-256-GCM encryption/decryption.
- * Type-safe wrapper around Web Crypto API CryptoKey.
+ * Branded CryptoKey type for AES-256-GCM encryption/decryption.
+ * Ensures only keys derived through our engine are used.
  */
-export interface EncryptionKey {
-  readonly type: 'secret';
-  readonly extractable: false;
-  readonly algorithm: {
-    readonly name: 'AES-GCM';
-  };
-  readonly usages: readonly ['encrypt', 'decrypt'];
-}
+export type EncryptionKey = CryptoKey & { readonly __brand: 'EncryptionKey' };
 
 /**
  * Output of encryption operation: ciphertext + metadata for decryption.
@@ -92,7 +85,7 @@ export class EncryptionError extends Error {
  * Thrown when decryption fails (wrong key, tampered ciphertext, invalid tag, etc.)
  */
 export class DecryptionError extends Error {
-  override readonly name: string = 'DecryptionError';
+  override readonly name: 'DecryptionError' | 'AuthenticationError' = 'DecryptionError' as const;
 
   constructor(
     message: string,
@@ -106,7 +99,7 @@ export class DecryptionError extends Error {
  * Thrown when decryption fails due to authentication tag mismatch (ciphertext tampered or wrong key).
  */
 export class AuthenticationError extends DecryptionError {
-  override readonly name: string = 'AuthenticationError';
+  override readonly name = 'AuthenticationError' as const;
 
   constructor(message = 'Authentication tag verification failed') {
     super(message);

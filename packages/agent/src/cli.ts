@@ -5,7 +5,6 @@ import { getRecent, getTodayTotal, getLifetimeTotal } from './history.js';
 import { readJsonlFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
 import { fetchWithPayment } from './payment-engine.js';
-import { promptPassword } from './prompt.js';
 
 import type { HistoryEntry } from './history.js';
 
@@ -28,16 +27,9 @@ export function buildProgram(): Command {
     .description('Generate a new machine-bound encrypted wallet')
     .option('-n, --network <caip2>', 'Default network (CAIP-2)', 'eip155:324705682')
     .option('-f, --force', 'Overwrite existing wallet')
-    .option('-p, --password <string>', 'Password for wallet encryption')
-    .option('-i, --interactive-password', 'Prompt for password interactively')
-    .action(async (options: { network: string; force?: boolean; password?: string; interactivePassword?: boolean }) => {
+    .action(async (options: { network: string; force?: boolean }) => {
       try {
-        let password = options.password;
-        if (options.interactivePassword) {
-          password = await promptPassword('Enter new wallet password: ');
-        }
-
-        const result = await createWallet({ network: options.network, force: options.force, password });
+        const result = await createWallet({ network: options.network, force: options.force });
         outputJson({
           ok: true,
           address: result.address,
@@ -56,16 +48,9 @@ export function buildProgram(): Command {
     .requiredOption('-k, --key <hex>', 'Private key (0x-prefixed hex)')
     .option('-n, --network <caip2>', 'Default network (CAIP-2)', 'eip155:324705682')
     .option('-f, --force', 'Overwrite existing wallet')
-    .option('-p, --password <string>', 'Password for wallet encryption')
-    .option('-i, --interactive-password', 'Prompt for password interactively')
-    .action(async (options: { key: string; network: string; force?: boolean; password?: string; interactivePassword?: boolean }) => {
+    .action(async (options: { key: string; network: string; force?: boolean }) => {
       try {
-        let password = options.password;
-        if (options.interactivePassword) {
-          password = await promptPassword('Enter new wallet password: ');
-        }
-
-        const result = await importWallet(options.key, { network: options.network, force: options.force, password });
+        const result = await importWallet(options.key, { network: options.network, force: options.force });
         outputJson({
           ok: true,
           address: result.address,
