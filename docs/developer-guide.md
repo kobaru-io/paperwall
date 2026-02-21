@@ -170,6 +170,8 @@ paperwall/
 
 ### Installation
 
+**For development (full monorepo):**
+
 ```bash
 git clone https://github.com/kobaru/paperwall.git
 cd paperwall
@@ -177,6 +179,19 @@ npm install
 ```
 
 This installs dependencies for all three packages using npm workspaces.
+
+**For agent CLI only** (if you just need to use the CLI, not develop on it):
+
+```bash
+npm install -g @kobaru/paperwall
+paperwall --help
+```
+
+Or try it without installing:
+
+```bash
+npx @kobaru/paperwall --help
+```
 
 ### Building
 

@@ -16,7 +16,19 @@ If your client supports MCP, see the **[MCP server guide](mcp-server-guide.md)**
 
 ## Quick setup (skill-based)
 
-Run the one-liner installer:
+**Try instantly with npx (zero install):**
+
+```bash
+npx @kobaru/paperwall --help
+```
+
+**Or install globally:**
+
+```bash
+npm install -g @kobaru/paperwall
+```
+
+**Full guided setup** (recommended -- walks you through wallet, budget, and AI client integration):
 
 **macOS / Linux:**
 
@@ -46,9 +58,9 @@ The installer walks you through building the CLI, choosing your AI client and in
 
 ## What the installer does
 
-### Step 1: Build and install the CLI
+### Step 1: Install the CLI
 
-The installer builds the `paperwall` binary from source and makes it available as a command:
+If you used `npm install -g @kobaru/paperwall`, the CLI is already available. The guided installer (curl script) builds the `paperwall` binary from source and makes it available as a command:
 
 - **macOS / Linux:** Symlinks to `~/.local/bin/paperwall`. Because it's a symlink, the CLI stays in sync with the built source. Ensure `~/.local/bin` is on your PATH.
 - **Windows:** Creates a `paperwall.cmd` wrapper in `%USERPROFILE%\.local\bin\`. Add this directory to your PATH if it isn't already.

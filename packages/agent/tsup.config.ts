@@ -8,6 +8,7 @@ export default defineConfig({
   banner: { js: '#!/usr/bin/env node' },
   treeshake: true,
   clean: true,
+  onSuccess: 'chmod +x dist/cli.js',
   dts: false,
   external: ['@napi-rs/keyring'],
 });

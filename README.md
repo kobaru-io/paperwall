@@ -122,6 +122,20 @@ You want an ad-free web and don't mind paying a few cents per article—all in a
 
 You use Claude Code, Gemini CLI, Cursor, Antigravity, or another AI agent and want it to pay for paywalled articles on your behalf.
 
+**Try it instantly (zero install):**
+
+```bash
+npx @kobaru/paperwall --help
+```
+
+**Install globally:**
+
+```bash
+npm install -g @kobaru/paperwall
+```
+
+**Full guided setup** (wallet, budget, AI client integration):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
 ```

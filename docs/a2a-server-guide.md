@@ -134,7 +134,19 @@ Choose your deployment method based on your needs.
 
 ### 1. Install the CLI
 
-Build from source (the package is not yet published to npm):
+**Install from npm (recommended):**
+
+```bash
+npm install -g @kobaru/paperwall
+```
+
+Or use npx for zero-install usage:
+
+```bash
+npx @kobaru/paperwall --help
+```
+
+**From source:**
 
 ```bash
 git clone https://github.com/kobaru/paperwall.git

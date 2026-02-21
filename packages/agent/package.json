@@ -8,10 +8,36 @@
     "paperwall": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kobaru-io/paperwall.git",
+    "directory": "packages/agent"
+  },
+  "homepage": "https://github.com/kobaru-io/paperwall/tree/main/packages/agent#readme",
+  "bugs": {
+    "url": "https://github.com/kobaru-io/paperwall/issues"
+  },
+  "keywords": [
+    "x402",
+    "micropayments",
+    "crypto",
+    "usdc",
+    "skale",
+    "paywall",
+    "a2a",
+    "agent",
+    "cli"
   ],
   "scripts": {
     "build": "tsup",
+    "prepublishOnly": "npm run build && npm test",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -11,7 +11,7 @@ MCP is the recommended integration method for any client that supports it: Claud
 - [How it works](#how-it-works)
 - [MCP vs skill-based integration](#mcp-vs-skill-based-integration)
 - [Getting started](#getting-started)
-  - [1. Build the CLI](#1-build-the-cli)
+  - [1. Install the CLI](#1-install-the-cli)
   - [2. Create a wallet](#2-create-a-wallet)
   - [3. Set spending limits](#3-set-spending-limits)
   - [4. Configure your MCP client](#4-configure-your-mcp-client)
@@ -78,7 +78,17 @@ Paperwall supports two integration methods. MCP is recommended when your client 
 
 ## Getting started
 
-### 1. Build the CLI
+### 1. Install the CLI
+
+**Install from npm (recommended):**
+
+```bash
+npm install -g @kobaru/paperwall
+```
+
+After installing, the CLI is available as `paperwall`. You can verify with `paperwall --help`.
+
+**Or build from source:**
 
 ```bash
 git clone https://github.com/kobaru/paperwall.git
@@ -562,7 +572,13 @@ The command validates that a wallet exists before starting. If no wallet is foun
 
 ## Automated install
 
-The install script handles downloading, building, wallet setup, budget configuration, and MCP client configuration in one step.
+If you just need the CLI, the fastest option is npm:
+
+```bash
+npm install -g @kobaru/paperwall
+```
+
+For a full guided setup (wallet, budget, and MCP client configuration in one step), use the installer script:
 
 **macOS / Linux:**
 

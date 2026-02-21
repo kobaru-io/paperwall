@@ -8,6 +8,10 @@ IFS=$'\n\t'
 
 REPO="kobaru-io/paperwall"
 VERSION="${1:-main}"
+if [[ "$VERSION" != "main" && ! "$VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Error: Invalid version format. Use 'main' or 'vX.Y.Z' (e.g., v0.1.0)." >&2
+  exit 1
+fi
 INSTALL_DIR="${PAPERWALL_INSTALL_DIR:-$HOME/.paperwall/src}"
 TMPDIR_WORK=""
 

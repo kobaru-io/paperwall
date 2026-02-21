@@ -13,8 +13,10 @@ The Paperwall Agent CLI is a command-line tool that lets AI agents (and humans) 
 
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
-  - [From source](#from-source-current-method)
-  - [With npx](#with-npx-once-published)
+  - [With npx](#with-npx-recommended-zero-install)
+  - [Global install](#global-install)
+  - [Full guided setup](#full-guided-setup)
+  - [From source](#from-source)
   - [With Docker](#with-docker)
 - [Quick start](#quick-start)
 - [Wallet commands](#wallet-commands)
@@ -54,7 +56,28 @@ The Paperwall Agent CLI is a command-line tool that lets AI agents (and humans) 
 
 ## Installation
 
-### From source (current method)
+### With npx (recommended, zero install)
+
+```bash
+npx @kobaru/paperwall --help
+```
+
+### Global install
+
+```bash
+npm install -g @kobaru/paperwall
+paperwall --help
+```
+
+### Full guided setup
+
+The installer walks you through wallet creation, budget configuration, and AI client integration (MCP or skill):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
+```
+
+### From source
 
 ```bash
 git clone https://github.com/kobaru/paperwall.git
@@ -74,12 +97,6 @@ Or link it globally for convenience:
 ```bash
 npm link --workspace=@kobaru/paperwall
 paperwall --help
-```
-
-### With npx (once published)
-
-```bash
-npx @kobaru/paperwall --help
 ```
 
 ### With Docker
