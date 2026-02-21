@@ -9,6 +9,7 @@ import {
   importWallet,
   resolvePrivateKey,
   getWalletEncryptionMode,
+  clearKeyCache,
 } from './wallet.js';
 import type { WalletFile } from './wallet.js';
 import { readJsonFile, writeJsonFile } from './storage.js';
@@ -76,6 +77,7 @@ describe('Integration: All Encryption Modes End-to-End', () => {
 
   beforeEach(() => {
     env = setupTempHome();
+    clearKeyCache();
   });
 
   afterEach(() => {

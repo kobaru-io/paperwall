@@ -84,6 +84,14 @@ describe('KeyDerivationEngine', () => {
       ).rejects.toThrow('password must not be empty');
     });
 
+    it('should reject empty Uint8Array input', async () => {
+      const salt = new Uint8Array(32).fill(0x0E);
+
+      await expect(
+        engine.deriveKey(salt, new Uint8Array(0)),
+      ).rejects.toThrow('Input must not be empty');
+    });
+
     it('should accept Uint8Array input (for env-injected mode)', async () => {
       const salt = new Uint8Array(32).fill(0x08);
       const keyBytes = new Uint8Array(32).fill(0xAA);

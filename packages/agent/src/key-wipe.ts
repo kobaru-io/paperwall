@@ -21,9 +21,7 @@
  * @param buffer - Buffer to wipe (Buffer or Uint8Array)
  */
 export function wipeBuffer(buffer: Buffer | Uint8Array): void {
-  for (let i = 0; i < buffer.length; i++) {
-    buffer[i] = 0;
-  }
+  buffer.fill(0);
 }
 
 /**

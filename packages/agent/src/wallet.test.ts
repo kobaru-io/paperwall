@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -9,9 +9,23 @@ import {
   getAddress,
   resolvePrivateKey,
   getWalletEncryptionMode,
+  getKeyStorage,
+  clearKeyCache,
+  migrateToKeychain,
+  migrateToFile,
 } from './wallet.js';
 import type { WalletFile } from './wallet.js';
 import { readJsonFile, writeJsonFile } from './storage.js';
+
+// Mock keychain module for keychain-storage tests
+vi.mock('./keychain.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./keychain.js')>();
+  return {
+    ...original,
+    detectKeychainAvailability: vi.fn().mockResolvedValue({ available: false, reason: 'mocked' }),
+    loadKeychainAdapter: vi.fn().mockResolvedValue(null),
+  };
+});
 
 describe('wallet', () => {
   let originalHome: string | undefined;
@@ -20,6 +34,7 @@ describe('wallet', () => {
   let tmpDir: string;
 
   beforeEach(() => {
+    clearKeyCache();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'paperwall-wallet-test-'));
     originalHome = process.env['HOME'];
     originalPrivateKeyEnv = process.env['PAPERWALL_PRIVATE_KEY'];
@@ -508,6 +523,264 @@ describe('wallet', () => {
   });
 
   // =============================================
+  // getKeyStorage
+  // =============================================
+
+  describe('getKeyStorage', () => {
+    it('should return file when keyStorage is absent (backward compat)', () => {
+      const wallet: WalletFile = {
+        address: '0x' + 'a'.repeat(40),
+        encryptedKey: 'abc',
+        keySalt: 'def',
+        keyIv: 'ghi',
+        networkId: 'eip155:324705682',
+      };
+      expect(getKeyStorage(wallet)).toBe('file');
+    });
+
+    it('should return file when keyStorage is file', () => {
+      const wallet: WalletFile = {
+        address: '0x' + 'a'.repeat(40),
+        encryptedKey: 'abc',
+        keySalt: 'def',
+        keyIv: 'ghi',
+        networkId: 'eip155:324705682',
+        keyStorage: 'file',
+      };
+      expect(getKeyStorage(wallet)).toBe('file');
+    });
+
+    it('should return keychain when keyStorage is keychain', () => {
+      const wallet: WalletFile = {
+        address: '0x' + 'a'.repeat(40),
+        encryptedKey: 'abc',
+        keySalt: 'def',
+        keyIv: 'ghi',
+        networkId: 'eip155:324705682',
+        keyStorage: 'keychain',
+      };
+      expect(getKeyStorage(wallet)).toBe('keychain');
+    });
+  });
+
+  // =============================================
+  // createWallet with keychain
+  // =============================================
+
+  describe('createWallet with keychain', () => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+    let keychainMod: typeof import('./keychain.js');
+
+    beforeAll(async () => {
+      keychainMod = await import('./keychain.js');
+    });
+
+    function mockDetect() { return vi.mocked(keychainMod.detectKeychainAvailability); }
+    function mockLoadAdapter() { return vi.mocked(keychainMod.loadKeychainAdapter); }
+
+    beforeEach(() => {
+      mockDetect().mockReset();
+      mockLoadAdapter().mockReset();
+    });
+
+    it('should create wallet with keyStorage: keychain and empty encryption fields', async () => {
+      const storeFn = vi.fn().mockResolvedValue(undefined);
+      mockDetect().mockResolvedValue({ available: true });
+      mockLoadAdapter().mockResolvedValue({
+        store: storeFn,
+        retrieve: vi.fn(),
+        delete: vi.fn(),
+      });
+
+      const result = await createWallet({ keychain: true });
+      expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+
+      const wallet = readJsonFile<WalletFile>('wallet.json');
+      expect(wallet?.keyStorage).toBe('keychain');
+      expect(wallet?.encryptedKey).toBe('');
+      expect(wallet?.keySalt).toBe('');
+      expect(wallet?.keyIv).toBe('');
+      expect(wallet?.encryptionMode).toBeUndefined();
+      expect(storeFn).toHaveBeenCalledOnce();
+    });
+
+    it('should throw mutual exclusion error when --keychain used with --mode password', async () => {
+      await expect(
+        createWallet({ keychain: true, mode: 'password', modeInput: 'test1234' }),
+      ).rejects.toThrow('Cannot use --keychain with --mode');
+    });
+
+    it('should throw when keychain is unavailable', async () => {
+      mockDetect().mockResolvedValue({ available: false, reason: 'No D-Bus' });
+
+      await expect(createWallet({ keychain: true })).rejects.toThrow(
+        'OS keychain is not available: No D-Bus',
+      );
+    });
+
+    it('should allow --keychain with default mode (machine-bound)', async () => {
+      const storeFn = vi.fn().mockResolvedValue(undefined);
+      mockDetect().mockResolvedValue({ available: true });
+      mockLoadAdapter().mockResolvedValue({
+        store: storeFn,
+        retrieve: vi.fn(),
+        delete: vi.fn(),
+      });
+
+      // mode defaults to machine-bound, which is allowed with --keychain
+      const result = await createWallet({ keychain: true, mode: 'machine-bound' });
+      expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    });
+  });
+
+  // =============================================
+  // importWallet with keychain
+  // =============================================
+
+  describe('importWallet with keychain', () => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+    let keychainMod: typeof import('./keychain.js');
+
+    beforeAll(async () => {
+      keychainMod = await import('./keychain.js');
+    });
+
+    function mockDetect() { return vi.mocked(keychainMod.detectKeychainAvailability); }
+    function mockLoadAdapter() { return vi.mocked(keychainMod.loadKeychainAdapter); }
+
+    beforeEach(() => {
+      mockDetect().mockReset();
+      mockLoadAdapter().mockReset();
+    });
+
+    it('should import wallet with keyStorage: keychain and empty encryption fields', async () => {
+      const storeFn = vi.fn().mockResolvedValue(undefined);
+      mockDetect().mockResolvedValue({ available: true });
+      mockLoadAdapter().mockResolvedValue({
+        store: storeFn,
+        retrieve: vi.fn(),
+        delete: vi.fn(),
+      });
+
+      const testKey = 'a'.repeat(64);
+      const result = await importWallet(`0x${testKey}`, { keychain: true });
+      expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+
+      const wallet = readJsonFile<WalletFile>('wallet.json');
+      expect(wallet?.keyStorage).toBe('keychain');
+      expect(wallet?.encryptedKey).toBe('');
+      expect(wallet?.keySalt).toBe('');
+      expect(wallet?.keyIv).toBe('');
+      expect(storeFn).toHaveBeenCalledWith('paperwall', 'wallet-private-key', testKey);
+    });
+
+    it('should throw mutual exclusion error when --keychain used with --mode password', async () => {
+      await expect(
+        importWallet('0x' + 'a'.repeat(64), { keychain: true, mode: 'password', modeInput: 'test1234' }),
+      ).rejects.toThrow('Cannot use --keychain with --mode');
+    });
+
+    it('should throw when keychain is unavailable', async () => {
+      mockDetect().mockResolvedValue({ available: false, reason: 'No D-Bus' });
+
+      await expect(
+        importWallet('0x' + 'a'.repeat(64), { keychain: true }),
+      ).rejects.toThrow('OS keychain is not available: No D-Bus');
+    });
+  });
+
+  // =============================================
+  // Keychain resolution path
+  // =============================================
+
+  describe('resolvePrivateKey with keychain storage', () => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+    let keychainMod: typeof import('./keychain.js');
+
+    beforeAll(async () => {
+      keychainMod = await import('./keychain.js');
+    });
+
+    function mockDetect() { return vi.mocked(keychainMod.detectKeychainAvailability); }
+    function mockLoadAdapter() { return vi.mocked(keychainMod.loadKeychainAdapter); }
+
+    function writeKeychainWallet(): void {
+      const walletData: WalletFile = {
+        address: '0x' + 'a'.repeat(40),
+        encryptedKey: 'unused',
+        keySalt: 'unused',
+        keyIv: 'unused',
+        networkId: 'eip155:324705682',
+        keyStorage: 'keychain',
+      };
+      writeJsonFile('wallet.json', walletData);
+    }
+
+    beforeEach(() => {
+      mockDetect().mockReset();
+      mockLoadAdapter().mockReset();
+    });
+
+    it('should prefer env var over keychain', async () => {
+      const envKey = '0x' + 'f'.repeat(64);
+      process.env['PAPERWALL_PRIVATE_KEY'] = envKey;
+      writeKeychainWallet();
+
+      const key = await resolvePrivateKey();
+      expect(key).toBe(envKey);
+      expect(mockDetect()).not.toHaveBeenCalled();
+    });
+
+    it('should resolve from keychain when configured and available', async () => {
+      writeKeychainWallet();
+      const rawKey = 'a'.repeat(64);
+      mockDetect().mockResolvedValue({ available: true });
+      mockLoadAdapter().mockResolvedValue({
+        store: vi.fn(),
+        retrieve: vi.fn().mockResolvedValue(rawKey),
+        delete: vi.fn(),
+      });
+
+      const key = await resolvePrivateKey();
+      expect(key).toBe(`0x${rawKey}`);
+      expect(mockDetect()).toHaveBeenCalledOnce();
+      expect(mockLoadAdapter()).toHaveBeenCalledOnce();
+    });
+
+    it('should throw when keychain configured but unavailable', async () => {
+      writeKeychainWallet();
+      mockDetect().mockResolvedValue({ available: false, reason: 'D-Bus not found' });
+
+      await expect(resolvePrivateKey()).rejects.toThrow(
+        'keychain is unavailable: D-Bus not found',
+      );
+    });
+
+    it('should throw when keychain configured, available, but key not found', async () => {
+      writeKeychainWallet();
+      mockDetect().mockResolvedValue({ available: true });
+      mockLoadAdapter().mockResolvedValue({
+        store: vi.fn(),
+        retrieve: vi.fn().mockResolvedValue(null),
+        delete: vi.fn(),
+      });
+
+      await expect(resolvePrivateKey()).rejects.toThrow(
+        'no key found in keychain',
+      );
+    });
+
+    it('should use decrypt path for file storage wallets (unchanged)', async () => {
+      // Create a real file-storage wallet and verify decrypt still works
+      await importWallet('0x' + 'a'.repeat(64));
+      clearKeyCache();
+      const key = await resolvePrivateKey();
+      expect(key).toBe('0x' + 'a'.repeat(64));
+      expect(mockDetect()).not.toHaveBeenCalled();
+    });
+  });
+
+  // =============================================
   // ST-005-08: Integration tests (all modes + legacy)
   // =============================================
 
@@ -589,6 +862,142 @@ describe('wallet', () => {
       // Encryption mode metadata should differ
       expect(mbFile?.encryptionMode).toBe('machine-bound');
       expect(pwFile?.encryptionMode).toBe('password');
+    });
+  });
+
+  // =============================================
+  // Wallet migration
+  // =============================================
+
+  describe('wallet migration', () => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+    let keychainMod: typeof import('./keychain.js');
+
+    beforeAll(async () => {
+      keychainMod = await import('./keychain.js');
+    });
+
+    function mockDetect() { return vi.mocked(keychainMod.detectKeychainAvailability); }
+    function mockLoadAdapter() { return vi.mocked(keychainMod.loadKeychainAdapter); }
+
+    beforeEach(() => {
+      mockDetect().mockReset();
+      mockLoadAdapter().mockReset();
+    });
+
+    describe('migrateToKeychain', () => {
+      it('should migrate file wallet to keychain', async () => {
+        const testKey = 'a'.repeat(64);
+        await importWallet(`0x${testKey}`);
+        clearKeyCache();
+
+        const storeFn = vi.fn().mockResolvedValue(undefined);
+        const retrieveFn = vi.fn().mockResolvedValue(testKey);
+        const deleteFn = vi.fn().mockResolvedValue(true);
+        mockDetect().mockResolvedValue({ available: true });
+        mockLoadAdapter().mockResolvedValue({
+          store: storeFn,
+          retrieve: retrieveFn,
+          delete: deleteFn,
+        });
+
+        const result = await migrateToKeychain();
+        expect(result.from).toBe('file');
+        expect(result.to).toBe('keychain');
+        expect(result.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+
+        const wallet = readJsonFile<WalletFile>('wallet.json');
+        expect(wallet?.keyStorage).toBe('keychain');
+        expect(wallet?.encryptedKey).toBe('');
+        expect(wallet?.keySalt).toBe('');
+        expect(wallet?.keyIv).toBe('');
+        expect(storeFn).toHaveBeenCalledWith('paperwall', 'wallet-private-key', testKey);
+      });
+
+      it('should throw when already keychain', async () => {
+        const walletData: WalletFile = {
+          address: '0x' + 'a'.repeat(40),
+          encryptedKey: '',
+          keySalt: '',
+          keyIv: '',
+          networkId: 'eip155:324705682',
+          keyStorage: 'keychain',
+        };
+        writeJsonFile('wallet.json', walletData);
+
+        await expect(migrateToKeychain()).rejects.toThrow('already uses keychain');
+      });
+
+      it('should throw when keychain unavailable', async () => {
+        await importWallet('0x' + 'a'.repeat(64));
+        clearKeyCache();
+
+        mockDetect().mockResolvedValue({ available: false, reason: 'No D-Bus' });
+
+        await expect(migrateToKeychain()).rejects.toThrow('OS keychain is not available');
+      });
+
+      it('should rollback on verification failure', async () => {
+        const testKey = 'b'.repeat(64);
+        await importWallet(`0x${testKey}`);
+        clearKeyCache();
+
+        const storeFn = vi.fn().mockResolvedValue(undefined);
+        const retrieveFn = vi.fn().mockResolvedValue('wrong-key');
+        const deleteFn = vi.fn().mockResolvedValue(true);
+        mockDetect().mockResolvedValue({ available: true });
+        mockLoadAdapter().mockResolvedValue({
+          store: storeFn,
+          retrieve: retrieveFn,
+          delete: deleteFn,
+        });
+
+        await expect(migrateToKeychain()).rejects.toThrow('verification failed');
+        expect(deleteFn).toHaveBeenCalledWith('paperwall', 'wallet-private-key');
+      });
+    });
+
+    describe('migrateToFile', () => {
+      it('should migrate keychain wallet to file', async () => {
+        const testKey = 'c'.repeat(64);
+        // Write a keychain wallet
+        const walletData: WalletFile = {
+          address: '0x' + 'a'.repeat(40),
+          encryptedKey: '',
+          keySalt: '',
+          keyIv: '',
+          networkId: 'eip155:324705682',
+          keyStorage: 'keychain',
+        };
+        writeJsonFile('wallet.json', walletData);
+
+        const deleteFn = vi.fn().mockResolvedValue(true);
+        mockDetect().mockResolvedValue({ available: true });
+        mockLoadAdapter().mockResolvedValue({
+          store: vi.fn(),
+          retrieve: vi.fn().mockResolvedValue(testKey),
+          delete: deleteFn,
+        });
+
+        const result = await migrateToFile();
+        expect(result.from).toBe('keychain');
+        expect(result.to).toBe('file');
+
+        const wallet = readJsonFile<WalletFile>('wallet.json');
+        expect(wallet?.keyStorage).toBe('file');
+        expect(wallet?.encryptedKey).not.toBe('');
+        expect(wallet?.keySalt).not.toBe('');
+        expect(wallet?.keyIv).not.toBe('');
+        expect(wallet?.encryptionMode).toBe('machine-bound');
+        expect(deleteFn).toHaveBeenCalledWith('paperwall', 'wallet-private-key');
+      });
+
+      it('should throw when already file storage', async () => {
+        await importWallet('0x' + 'a'.repeat(64));
+        clearKeyCache();
+
+        await expect(migrateToFile()).rejects.toThrow('already uses file');
+      });
     });
   });
 });

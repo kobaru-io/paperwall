@@ -1,12 +1,15 @@
 import { Command } from 'commander';
-import { createWallet, importWallet, getAddress, getBalance } from './wallet.js';
+import { createWallet, importWallet, getAddress, getBalance, getKeyStorage, migrateToKeychain, migrateToFile } from './wallet.js';
+import { EncryptionModeDetector } from './modes.js';
+import type { EncryptionModeName } from './modes.js';
 import { setBudget, getBudget, smallestToUsdc, usdcToSmallest } from './budget.js';
 import { getRecent, getTodayTotal, getLifetimeTotal } from './history.js';
-import { readJsonlFile } from './storage.js';
+import { readJsonFile, readJsonlFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
 import { fetchWithPayment } from './payment-engine.js';
 
 import type { HistoryEntry } from './history.js';
+import type { WalletFile } from './wallet.js';
 
 export function buildProgram(): Command {
   const program = new Command();
@@ -24,17 +27,21 @@ export function buildProgram(): Command {
 
   wallet
     .command('create')
-    .description('Generate a new machine-bound encrypted wallet')
+    .description('Generate a new encrypted wallet')
     .option('-n, --network <caip2>', 'Default network (CAIP-2)', 'eip155:324705682')
     .option('-f, --force', 'Overwrite existing wallet')
-    .action(async (options: { network: string; force?: boolean }) => {
+    .option('--keychain', 'Store private key in OS keychain')
+    .action(async (options: { network: string; force?: boolean; keychain?: boolean }) => {
       try {
-        const result = await createWallet({ network: options.network, force: options.force });
+        const result = await createWallet({ network: options.network, force: options.force, keychain: options.keychain });
+        const walletFile = readJsonFile<WalletFile>('wallet.json');
+        const keyStorage = walletFile ? getKeyStorage(walletFile) : 'file';
         outputJson({
           ok: true,
           address: result.address,
           network: result.network,
           storagePath: result.storagePath,
+          keyStorage,
         });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -44,18 +51,22 @@ export function buildProgram(): Command {
 
   wallet
     .command('import')
-    .description('Import an existing private key with machine-bound encryption')
+    .description('Import an existing private key')
     .requiredOption('-k, --key <hex>', 'Private key (0x-prefixed hex)')
     .option('-n, --network <caip2>', 'Default network (CAIP-2)', 'eip155:324705682')
     .option('-f, --force', 'Overwrite existing wallet')
-    .action(async (options: { key: string; network: string; force?: boolean }) => {
+    .option('--keychain', 'Store private key in OS keychain')
+    .action(async (options: { key: string; network: string; force?: boolean; keychain?: boolean }) => {
       try {
-        const result = await importWallet(options.key, { network: options.network, force: options.force });
+        const result = await importWallet(options.key, { network: options.network, force: options.force, keychain: options.keychain });
+        const walletFile = readJsonFile<WalletFile>('wallet.json');
+        const keyStorage = walletFile ? getKeyStorage(walletFile) : 'file';
         outputJson({
           ok: true,
           address: result.address,
           network: result.network,
           storagePath: result.storagePath,
+          keyStorage,
         });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -102,6 +113,67 @@ export function buildProgram(): Command {
         } else {
           outputError('address_error', message, 1);
         }
+      }
+    });
+
+  wallet
+    .command('info')
+    .description('Show wallet storage and encryption info')
+    .action(async () => {
+      try {
+        const walletFile = readJsonFile<WalletFile>('wallet.json');
+        if (!walletFile) {
+          outputError('no_wallet', 'No wallet configured. Run: paperwall wallet create', 3);
+          return;
+        }
+        const storage = getKeyStorage(walletFile);
+        outputJson({
+          ok: true,
+          address: walletFile.address,
+          network: walletFile.networkId,
+          keyStorage: storage,
+          encryptionMode: storage === 'keychain' ? null : (walletFile.encryptionMode ?? 'machine-bound'),
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        outputError('wallet_info_failed', message, 1);
+      }
+    });
+
+  // ── Wallet migrate commands ────────────────────────────────
+
+  const migrate = wallet
+    .command('migrate')
+    .description('Migrate wallet between storage backends');
+
+  migrate
+    .command('to-keychain')
+    .description('Move private key from encrypted file to OS keychain')
+    .action(async () => {
+      try {
+        const result = await migrateToKeychain();
+        outputJson({ ok: true, ...result });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        outputError('migration_failed', message, 1);
+      }
+    });
+
+  migrate
+    .command('to-file')
+    .description('Move private key from OS keychain to encrypted file')
+    .option('--mode <name>', 'Encryption mode for file storage (machine-bound, password)', 'machine-bound')
+    .action(async (options: { mode: string }) => {
+      try {
+        if (!EncryptionModeDetector.isValidMode(options.mode)) {
+          outputError('invalid_mode', `Unknown encryption mode: "${options.mode}". Valid modes: machine-bound, password, env-injected`, 1);
+          return;
+        }
+        const result = await migrateToFile(options.mode);
+        outputJson({ ok: true, ...result });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        outputError('migration_failed', message, 1);
       }
     });
 

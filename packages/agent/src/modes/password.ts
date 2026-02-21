@@ -30,7 +30,7 @@ export function validatePasswordStrength(password: string): PasswordStrengthResu
   if (password.length < MIN_PASSWORD_LENGTH) {
     return {
       valid: false,
-      reason: `Password must be at least ${MIN_PASSWORD_LENGTH} characters (got ${password.length}). Longer passphrases are more secure than short complex passwords.`,
+      reason: `Password must be at least ${MIN_PASSWORD_LENGTH} characters. Longer passphrases are more secure than short complex passwords.`,
     };
   }
 

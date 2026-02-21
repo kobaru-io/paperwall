@@ -168,7 +168,7 @@ npm test --workspace=@paperwall/sdk
 npm test --workspace=@paperwall/extension
 
 # Agent unit tests
-npm test --workspace=@paperwall/agent
+npm test --workspace=@kobaru/paperwall
 
 # Integration tests
 npm test --workspace=@paperwall/integration-tests

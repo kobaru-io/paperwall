@@ -151,11 +151,15 @@ npm link --workspace=packages/agent
 
 ### 2. Create a wallet
 
+For local/standalone deployment, create a machine-bound wallet:
+
 ```bash
 paperwall wallet create
 ```
 
 This generates an Ethereum keypair, encrypts the private key with machine-bound PBKDF2 + AES-256-GCM (keyed to hostname and user ID), and stores it at `~/.paperwall/wallet.json` with 0o600 permissions. No password is needed -- the wallet auto-decrypts on the same machine.
+
+**Note for Docker/K8s:** If you plan to containerize the server, see [Docker deployment](#docker-deployment) for how to use environment-injected encryption instead.
 
 ### 3. Fund the wallet with USDC on SKALE
 
@@ -230,13 +234,22 @@ The compose file automatically configures:
 - Health checks
 - Auto-restart policy
 
-**Environment variables:**
+**Environment variables (choose one key option):**
+
 ```bash
-PAPERWALL_PRIVATE_KEY=0x...           # Your wallet private key (required)
+# Option 1: Direct private key
+PAPERWALL_PRIVATE_KEY=0x...           # Your wallet private key (raw, highest priority)
+
+# Option 2: Environment-injected encryption (recommended)
+PAPERWALL_WALLET_KEY=base64-32bytes   # 32-byte encryption key for wallet (recommended)
+
+# Common variables
 PAPERWALL_ACCESS_KEYS=key1,key2       # Bearer tokens for auth (optional)
 PAPERWALL_AUTH_TTL=600                # Authorization TTL in seconds (default: 300)
 PAPERWALL_NETWORK=eip155:324705682    # Network (default: SKALE testnet)
 ```
+
+**Recommended approach:** Use environment-injected encryption (`PAPERWALL_WALLET_KEY`) instead of `PAPERWALL_PRIVATE_KEY` for better security (wallet encrypted at rest).
 
 **Verify it's running:**
 ```bash
@@ -319,6 +332,15 @@ Config values are resolved with the following precedence (highest to lowest):
 | Auth TTL | `--auth-ttl` | `PAPERWALL_AUTH_TTL` | `server.json` | `300` (5 minutes) |
 | Access keys | -- | `PAPERWALL_ACCESS_KEYS` (comma-separated) | `server.json` | none (open access) |
 
+**Wallet encryption (for key resolution):**
+
+| Setting | CLI flag | Environment variable | Config file |
+|---------|----------|---------------------|-------------|
+| Wallet key | -- | `PAPERWALL_WALLET_KEY` (base64, 32 bytes) | `~/.paperwall/wallet.json` (encrypted) |
+| Private key (direct) | -- | `PAPERWALL_PRIVATE_KEY` (0x-prefixed hex) | N/A |
+
+See [Key resolution priority](#key-resolution-priority-1) below for how these are selected.
+
 The config file is located at `~/.paperwall/server.json`. Example:
 
 ```json
@@ -330,6 +352,103 @@ The config file is located at `~/.paperwall/server.json`. Example:
   "accessKeys": ["my-secret-key-1", "my-secret-key-2"]
 }
 ```
+
+---
+
+## Wallet encryption modes
+
+The A2A server needs access to your wallet's private key to sign payments. The wallet can be encrypted in different ways:
+
+### Machine-bound encryption (default, local only)
+
+```bash
+# Create wallet
+paperwall wallet create
+
+# Start server (works because wallet auto-decrypts)
+paperwall serve --port 4000
+```
+
+The wallet is encrypted using your machine's hostname and user ID. **This breaks when you restart a container** because the machine identity changes.
+
+**Use case:** Development and local testing only.
+
+### Direct private key (all deployments, raw key in memory)
+
+```bash
+# Start server with raw private key
+PAPERWALL_PRIVATE_KEY=0x... paperwall serve --port 4000
+```
+
+The private key is passed directly as an environment variable. No wallet file needed.
+
+**Pros:** Works everywhere
+**Cons:** Raw key is in memory; harder to manage
+**Use case:** CI/CD, temporary deployments, legacy systems
+
+### Environment-injected encryption (recommended for containers)
+
+```bash
+# Generate a 32-byte encryption key
+KEY=$(openssl rand -base64 32)
+
+# Create wallet with this key
+PAPERWALL_WALLET_KEY=$KEY paperwall wallet create --mode env-injected
+
+# Start server with the same key
+PAPERWALL_WALLET_KEY=$KEY paperwall serve --port 4000
+```
+
+The wallet is encrypted at rest using a key from the `PAPERWALL_WALLET_KEY` environment variable. The private key is only decrypted in memory when needed.
+
+**Pros:**
+- Encrypted at rest (wallet file is unreadable without the key)
+- Same key works across all container instances
+- Survives container restart/rescheduling
+- Secure for multi-pod deployments (K8s, Docker Swarm)
+
+**Cons:** Requires managing the encryption key in your secrets manager
+
+**Use case:** A2A servers in containers, K8s deployments, multi-instance setups
+
+**Multi-instance deployment example (Kubernetes):**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paperwall-a2a
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: paperwall
+        image: paperwall:latest
+        ports:
+        - containerPort: 4000
+        env:
+        - name: PAPERWALL_WALLET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: paperwall-secrets
+              key: wallet-key
+        - name: PAPERWALL_ACCESS_KEYS
+          valueFrom:
+            secretKeyRef:
+              name: paperwall-secrets
+              key: access-keys
+        - name: PAPERWALL_PORT
+          value: "4000"
+        volumeMounts:
+        - name: data
+          mountPath: /app/.paperwall
+      volumes:
+      - name: data
+        emptyDir: {}
+```
+
+All three pods decode the same wallet file using the same `PAPERWALL_WALLET_KEY`, enabling shared wallet access. Receipts are written to ephemeral storage (`emptyDir`); for persistent receipts, use a `PersistentVolumeClaim`.
 
 ---
 
@@ -570,7 +689,9 @@ The agent package includes a multi-stage Dockerfile based on `node:20-slim`.
 docker build -t paperwall packages/agent/
 ```
 
-**Run the server:**
+**Run the server (two options):**
+
+**Option 1: Direct private key (simple, single-instance)**
 
 ```bash
 docker run -p 4000:4000 \
@@ -580,9 +701,39 @@ docker run -p 4000:4000 \
   paperwall serve
 ```
 
-The `PAPERWALL_PRIVATE_KEY` environment variable provides the wallet private key directly, bypassing the encrypted wallet file. This is the recommended approach for containerized deployments.
+The `PAPERWALL_PRIVATE_KEY` environment variable provides the wallet private key directly, bypassing the encrypted wallet file. This works but requires the private key to be raw in memory.
 
-> **Security warning:** `PAPERWALL_PRIVATE_KEY` is a raw private key with access to your funds. Never commit it to source control, log it, or expose it in CI output. Use Docker secrets, a secrets manager, or encrypted environment variables in production.
+**Option 2: Environment-injected encryption (recommended for containers)**
+
+```bash
+# Generate a 32-byte base64 key
+KEY=$(openssl rand -base64 32)
+
+# Create the wallet locally with env-injected encryption
+PAPERWALL_WALLET_KEY=$KEY paperwall wallet create --mode env-injected
+
+# Now run the container with the same key
+docker run -p 4000:4000 \
+  -e PAPERWALL_WALLET_KEY=$KEY \
+  -e PAPERWALL_ACCESS_KEYS=key1,key2 \
+  -v paperwall-data:/app/.paperwall \
+  paperwall serve
+```
+
+Environment-injected encryption stores the wallet file encrypted (at `~/.paperwall/wallet.json`), then decrypts it using the `PAPERWALL_WALLET_KEY` environment variable. This is more secure because:
+- The private key is only decrypted when needed, not stored raw in env vars
+- The same wallet can be shared across multiple container instances with the same `PAPERWALL_WALLET_KEY`
+- Container restart/rescheduling doesn't break key derivation (unlike machine-bound encryption)
+
+**Wallet encryption modes explained:**
+
+| Mode | Setup | Pros | Cons |
+|------|-------|------|------|
+| Machine-bound (default) | `paperwall wallet create` | No password; works locally | Breaks on pod restart |
+| Direct private key | `PAPERWALL_PRIVATE_KEY=0x...` | Simple | Raw key in memory; hard to share |
+| **Environment-injected** | `PAPERWALL_WALLET_KEY=base64(32bytes)` | **Encrypted at rest; works across pods; secure** | **Recommended for containers** |
+
+> **Security warning:** Never commit `PAPERWALL_PRIVATE_KEY` or `PAPERWALL_WALLET_KEY` to source control. Use Docker secrets, a secrets manager, or encrypted environment variables in production.
 
 Mount a volume at `/app/.paperwall` to persist receipts and budget configuration across container restarts. Without a volume, receipt history is lost when the container stops.
 
@@ -592,14 +743,29 @@ The default `CMD` in the Dockerfile is `serve`, so `paperwall serve` runs automa
 
 The agent package includes a `docker-compose.yml` for single-command startup. From the `packages/agent/` directory:
 
+**Option 1: Direct private key**
+
 ```bash
 PAPERWALL_PRIVATE_KEY=0x... docker compose up -d
+```
+
+**Option 2: Environment-injected encryption (recommended)**
+
+```bash
+# Generate a 32-byte base64 key
+KEY=$(openssl rand -base64 32)
+
+# Create the wallet locally with env-injected encryption
+PAPERWALL_WALLET_KEY=$KEY paperwall wallet create --mode env-injected
+
+# Start the server with Docker Compose
+PAPERWALL_WALLET_KEY=$KEY docker compose up -d
 ```
 
 With access keys:
 
 ```bash
-PAPERWALL_PRIVATE_KEY=0x... PAPERWALL_ACCESS_KEYS=key1,key2 docker compose up -d
+PAPERWALL_WALLET_KEY=$KEY PAPERWALL_ACCESS_KEYS=key1,key2 docker compose up -d
 ```
 
 The compose file configures:
@@ -612,7 +778,7 @@ The compose file configures:
 To override the network, port, or auth TTL, set the environment variables:
 
 ```bash
-PAPERWALL_PRIVATE_KEY=0x... PAPERWALL_NETWORK=eip155:1187947933 PAPERWALL_PORT=8080 PAPERWALL_AUTH_TTL=600 docker compose up -d
+PAPERWALL_WALLET_KEY=$KEY PAPERWALL_NETWORK=eip155:1187947933 PAPERWALL_PORT=8080 PAPERWALL_AUTH_TTL=600 docker compose up -d
 ```
 
 Common operations:
@@ -682,7 +848,21 @@ docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/paperwall/a2a-server:late
 
 Never pass raw private keys via environment variables in Cloud Run. Use Secret Manager to store sensitive values securely.
 
-**Create the private key secret:**
+**Option A: Environment-injected encryption (recommended)**
+
+Generate a 32-byte encryption key and create the wallet locally:
+
+```bash
+KEY=$(openssl rand -base64 32)
+PAPERWALL_WALLET_KEY=$KEY paperwall wallet create --mode env-injected
+
+# Store the key in Secret Manager
+echo -n "$KEY" | gcloud secrets create paperwall-wallet-key \
+  --data-file=- \
+  --replication-policy=automatic
+```
+
+**Option B: Direct private key (simpler, less secure)**
 
 ```bash
 echo -n "0xYOUR_PRIVATE_KEY_HERE" | gcloud secrets create paperwall-private-key \
@@ -703,6 +883,27 @@ echo -n "key1,key2,key3" | gcloud secrets create paperwall-access-keys \
 ### 4. Deploy to Cloud Run
 
 Deploy the service with secrets mounted as environment variables:
+
+**With environment-injected encryption (recommended):**
+
+```bash
+gcloud run deploy paperwall-a2a \
+  --image=us-central1-docker.pkg.dev/YOUR_PROJECT_ID/paperwall/a2a-server:latest \
+  --platform=managed \
+  --region=us-central1 \
+  --allow-unauthenticated \
+  --port=4000 \
+  --set-env-vars="PAPERWALL_PORT=4000,PAPERWALL_HOST=0.0.0.0,PAPERWALL_NETWORK=eip155:324705682" \
+  --set-secrets="PAPERWALL_WALLET_KEY=paperwall-wallet-key:latest,PAPERWALL_ACCESS_KEYS=paperwall-access-keys:latest" \
+  --min-instances=0 \
+  --max-instances=10 \
+  --memory=512Mi \
+  --cpu=1 \
+  --timeout=300s \
+  --concurrency=80
+```
+
+**With direct private key:**
 
 ```bash
 gcloud run deploy paperwall-a2a \

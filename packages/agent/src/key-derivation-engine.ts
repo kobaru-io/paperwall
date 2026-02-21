@@ -45,11 +45,16 @@ export class KeyDerivationEngine implements EncryptionMode {
       inputBytes = input;
     }
 
+    if (inputBytes.length === 0) {
+      throw new DeriveKeyError('Input must not be empty');
+    }
+
     try {
       // Import key material for PBKDF2
+      // Node.js Web Crypto types expect ArrayBuffer; Uint8Array is runtime-compatible
       const keyMaterial = await crypto.subtle.importKey(
         'raw',
-        inputBytes as unknown as ArrayBuffer,
+        inputBytes.buffer as ArrayBuffer,
         'PBKDF2',
         false,
         ['deriveKey'],
@@ -59,7 +64,7 @@ export class KeyDerivationEngine implements EncryptionMode {
       const derivedKey = await crypto.subtle.deriveKey(
         {
           name: 'PBKDF2',
-          salt: salt as unknown as ArrayBuffer,
+          salt: salt.buffer as ArrayBuffer,
           iterations: PBKDF2_ITERATIONS,
           hash: PBKDF2_HASH,
         },
@@ -69,7 +74,7 @@ export class KeyDerivationEngine implements EncryptionMode {
         ['encrypt', 'decrypt'],
       );
 
-      return derivedKey as unknown as EncryptionKey;
+      return derivedKey as EncryptionKey;
     } catch (cause) {
       if (cause instanceof DeriveKeyError) {
         throw cause;
@@ -93,8 +98,8 @@ export class KeyDerivationEngine implements EncryptionMode {
       // Encrypt using AES-256-GCM
       const ciphertext = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
-        key as unknown as CryptoKey,
-        plaintext as unknown as ArrayBuffer,
+        key,
+        plaintext.buffer as ArrayBuffer,
       );
 
       // AES-GCM in Web Crypto API appends auth tag to ciphertext
@@ -132,8 +137,8 @@ export class KeyDerivationEngine implements EncryptionMode {
 
       // Decrypt using AES-256-GCM
       const plaintext = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: encrypted.iv as unknown as ArrayBuffer },
-        key as unknown as CryptoKey,
+        { name: 'AES-GCM', iv: encrypted.iv.buffer as ArrayBuffer },
+        key,
         ciphertextWithTag,
       );
 

@@ -20,6 +20,8 @@ The Paperwall Agent CLI is a command-line tool that lets AI agents (and humans) 
 - [Wallet commands](#wallet-commands)
   - [Create a wallet](#create-a-wallet)
   - [Import an existing key](#import-an-existing-key)
+  - [Wallet info](#wallet-info)
+  - [Migrate storage backend](#migrate-storage-backend)
   - [Check balance](#check-balance)
   - [Show address](#show-address)
 - [Budget commands](#budget-commands)
@@ -70,14 +72,14 @@ node packages/agent/dist/cli.js --help
 Or link it globally for convenience:
 
 ```bash
-npm link --workspace=@paperwall/agent
+npm link --workspace=@kobaru/paperwall
 paperwall --help
 ```
 
 ### With npx (once published)
 
 ```bash
-npx @paperwall/agent --help
+npx @kobaru/paperwall --help
 ```
 
 ### With Docker
@@ -116,21 +118,52 @@ paperwall fetch https://example.com/article --max-price 0.05
 
 ## Wallet commands
 
-All wallet data lives at `~/.paperwall/wallet.json` with `0o600` permissions (owner read/write only).
+The agent supports two storage backends for private keys:
 
-The private key is encrypted with PBKDF2 (600,000 iterations) + AES-256-GCM. The encryption key derives from the machine's hostname and user ID. No password is needed -- the wallet auto-decrypts on the same machine for the same user.
+| Backend | Where key lives | Protection | Best for |
+|---------|----------------|------------|----------|
+| **Encrypted file** (default) | `~/.paperwall/wallet.json` (0o600) | PBKDF2 + AES-256-GCM | All platforms |
+| **OS keychain** | macOS Keychain, GNOME Keyring, Windows Credential Manager | OS-level access control | Desktop machines with native keychain |
+
+When using the encrypted file backend, three encryption modes are supported:
+
+| Mode | When to use | How it works | Key derivation |
+|------|-------------|-------------|-----------------|
+| **Password** | MCP CLI (interactive) | User enters password on each session. Password is masked via @inquirer/password. Session caching minimizes re-prompts during a CLI session. | Password + 32-byte random salt via PBKDF2 |
+| **Environment-injected** | A2A server (containers, K8s) | Encryption key read from `PAPERWALL_WALLET_KEY` environment variable. Enables deterministic key derivation across pod instances without re-entering passwords. | Base64-encoded 32-byte key from env var |
+| **Machine-bound** | Backward compatibility (legacy) | No password needed. Wallet auto-decrypts on the same machine for the same user. Breaks when pod restarts (machine identity changes). | Hostname + user ID + fixed salt via PBKDF2 |
+
+The wallet metadata includes `encryptionMode` field. If missing (legacy wallets), the agent auto-detects as `machine-bound`.
 
 ### Create a wallet
 
 ```bash
-paperwall wallet create [--network <caip2>] [--force]
+paperwall wallet create [--network <caip2>] [--mode <mode>] [--keychain] [--force]
 ```
 
-Generates a fresh private key dedicated to micropayments. The key is encrypted with machine-bound encryption and stored locally.
+Generates a fresh private key dedicated to micropayments. The key is encrypted with the selected mode and stored locally, or stored in the OS keychain.
 
 **Options:**
 - `--network <caip2>` -- Default blockchain network in CAIP-2 format (default: `eip155:324705682`, SKALE testnet)
+- `--mode <mode>` -- Encryption mode: `machine-bound` (default), `password`, or `env-injected`. Cannot be combined with `--keychain`.
+- `--keychain` -- Store the private key in the OS keychain instead of an encrypted file. Cannot be combined with `--mode`.
 - `--force` -- Overwrite an existing wallet (without this flag, the command refuses to overwrite)
+
+**Examples:**
+
+```bash
+# Machine-bound (default, no password needed)
+paperwall wallet create
+
+# Store in OS keychain (macOS Keychain, GNOME Keyring, Windows Credential Manager)
+paperwall wallet create --keychain
+
+# Password mode (interactive, prompted on first use)
+paperwall wallet create --mode password
+
+# Environment-injected (for container deployments)
+paperwall wallet create --mode env-injected
+```
 
 **Output:**
 ```json
@@ -138,6 +171,7 @@ Generates a fresh private key dedicated to micropayments. The key is encrypted w
   "ok": true,
   "address": "0xAbCd...1234",
   "network": "eip155:324705682",
+  "encryptionMode": "password",
   "storagePath": "/home/you/.paperwall/wallet.json"
 }
 ```
@@ -147,19 +181,37 @@ Save your address -- you need it to fund the wallet.
 ### Import an existing key
 
 ```bash
-paperwall wallet import --key <hex> [--network <caip2>] [--force]
+paperwall wallet import --key <hex> [--network <caip2>] [--mode <mode>] [--keychain] [--force]
 ```
 
-Imports an existing private key and encrypts it with machine-bound encryption. The plaintext key is not stored -- only the encrypted form is persisted.
+Imports an existing private key and encrypts it with the selected mode, or stores it in the OS keychain. The plaintext key is not stored -- only the encrypted form (or keychain entry) is persisted.
 
 **Warning:** Never import your main wallet. This agent makes automated payments on your behalf -- AI assistants can trigger transactions without manual approval. Always use a dedicated wallet funded with only the amount you intend to spend on micropayments.
 
 **Options:**
 - `--key <hex>` -- Private key as hex (with or without `0x` prefix, 64 hex characters). Required.
 - `--network <caip2>` -- Default blockchain network (default: `eip155:324705682`)
+- `--mode <mode>` -- Encryption mode: `machine-bound` (default), `password`, or `env-injected`. Cannot be combined with `--keychain`.
+- `--keychain` -- Store the private key in the OS keychain. Cannot be combined with `--mode`.
 - `--force` -- Overwrite an existing wallet
 
-**Output:** Same format as `wallet create`.
+**Examples:**
+
+```bash
+# Import with machine-bound encryption
+paperwall wallet import --key 0x1234...abcd
+
+# Import into OS keychain
+paperwall wallet import --key 0x1234...abcd --keychain
+
+# Import with password encryption (interactive)
+paperwall wallet import --key 0x1234...abcd --mode password
+
+# Import with environment-injected encryption
+paperwall wallet import --key 0x1234...abcd --mode env-injected
+```
+
+**Output:** Same format as `wallet create` with `encryptionMode` and `keyStorage` fields.
 
 ### Check balance
 
@@ -198,6 +250,60 @@ Prints your wallet's public address.
 ```json
 {
   "ok": true,
+  "address": "0xAbCd...1234"
+}
+```
+
+### Wallet info
+
+```bash
+paperwall wallet info
+```
+
+Shows the current wallet's storage backend and encryption mode.
+
+**Output:**
+```json
+{
+  "ok": true,
+  "address": "0xAbCd...1234",
+  "keyStorage": "file",
+  "encryptionMode": "password"
+}
+```
+
+The `keyStorage` field is `"file"` (encrypted file) or `"keychain"` (OS keychain). When `keyStorage` is `"keychain"`, the `encryptionMode` is `"none"` (the OS keychain provides its own protection).
+
+### Migrate storage backend
+
+```bash
+paperwall wallet migrate to-keychain [--mode <mode>]
+paperwall wallet migrate to-file [--mode <mode>]
+```
+
+Moves the private key between storage backends. Migration is atomic: the key is written to the new backend, verified, then removed from the old backend. If any step fails, the original is preserved.
+
+**`to-keychain`** -- Moves the key from the encrypted file to the OS keychain. Requires a password if the current encryption mode is `password`.
+
+**`to-file`** -- Moves the key from the OS keychain to an encrypted file.
+- `--mode <mode>` -- Encryption mode for the new file: `machine-bound` (default), `password`, or `env-injected`.
+
+**Examples:**
+
+```bash
+# Move from encrypted file to OS keychain
+paperwall wallet migrate to-keychain
+
+# Move from OS keychain to password-encrypted file
+paperwall wallet migrate to-file --mode password
+```
+
+**Output:**
+```json
+{
+  "ok": true,
+  "from": "file",
+  "to": "keychain",
   "address": "0xAbCd...1234"
 }
 ```
@@ -419,6 +525,7 @@ Always check the `ok` field in the JSON response before processing results.
 | Variable | Purpose |
 |----------|---------|
 | `PAPERWALL_PRIVATE_KEY` | Private key as `0x`-prefixed hex. For automation and CI. Bypasses wallet file entirely. |
+| `PAPERWALL_WALLET_KEY` | Base64-encoded 32-byte encryption key for environment-injected wallet mode. For container deployments where wallet is encrypted at rest. |
 | `PAPERWALL_NETWORK` | Blockchain network as CAIP-2 ID (default: `eip155:324705682`) |
 
 Server-specific variables (`PAPERWALL_PORT`, `PAPERWALL_HOST`, `PAPERWALL_ACCESS_KEYS`) are documented in the [A2A server guide](a2a-server-guide.md#configuration).
@@ -427,8 +534,29 @@ Server-specific variables (`PAPERWALL_PORT`, `PAPERWALL_HOST`, `PAPERWALL_ACCESS
 
 When the agent needs your private key (for `fetch` or `serve`), it tries these sources in order:
 
-1. `PAPERWALL_PRIVATE_KEY` environment variable -- direct key, no wallet file needed
-2. Machine-bound encrypted wallet file at `~/.paperwall/wallet.json` -- auto-decrypts on the same machine for the same user
+1. `PAPERWALL_PRIVATE_KEY` environment variable -- direct key, no wallet file needed (highest priority)
+2. OS keychain -- if `wallet.json` has `keyStorage: "keychain"`, retrieves from macOS Keychain / GNOME Keyring / Windows Credential Manager
+3. Encrypted wallet file at `~/.paperwall/wallet.json` -- auto-decrypts using detected encryption mode:
+   - Machine-bound: derives key from hostname+uid
+   - Password: prompts user for password (interactive)
+   - Environment-injected: requires `PAPERWALL_WALLET_KEY`
+
+**Examples:**
+
+```bash
+# Option 1: Direct key (raw private key in env var)
+PAPERWALL_PRIVATE_KEY=0x... paperwall fetch https://example.com/article --max-price 0.05
+
+# Option 2: Environment-injected (wallet file encrypted, key in env var)
+PAPERWALL_WALLET_KEY=base64-32-bytes paperwall fetch https://example.com/article --max-price 0.05
+
+# Option 3: Machine-bound (wallet auto-unlocks on same machine)
+paperwall fetch https://example.com/article --max-price 0.05
+
+# Option 4: Password mode (interactive prompt)
+paperwall fetch https://example.com/article --max-price 0.05
+# (prompts for password; cached during session)
+```
 
 ---
 
@@ -449,7 +577,7 @@ All data is stored in `~/.paperwall/` with restrictive file permissions:
 
 | File | Permissions | Format | Purpose |
 |------|-------------|--------|---------|
-| `wallet.json` | `0o600` | JSON | Machine-bound encrypted private key, address, network |
+| `wallet.json` | `0o600` | JSON | Wallet metadata (address, network, encryption mode, key storage). When `keyStorage` is `"file"`, also contains the encrypted private key. When `keyStorage` is `"keychain"`, the key lives in the OS credential store. |
 | `budget.json` | `0o600` | JSON | Budget limits (per-request, daily, total) |
 | `history.jsonl` | `0o600` | JSONL (append-only) | Payment history |
 | `receipts.jsonl` | `0o600` | JSONL (append-only) | A2A server receipts ([AP2](https://ap2-protocol.org/) lifecycle) |
@@ -512,11 +640,59 @@ paperwall wallet import --key 0x... --force
 
 ## Security notes
 
-- **Machine-bound encryption:** Your wallet private key is encrypted with PBKDF2 (600,000 iterations) + AES-256-GCM. The encryption key derives from the machine's hostname and user ID -- the wallet auto-decrypts on the same machine but is useless if copied elsewhere.
+### Encryption modes (detailed)
+
+**Machine-bound encryption** (default, backward compatible):
+- Encryption key: `PBKDF2(hostname:uid:salt, 600,000 iterations, SHA-256)` → 32-byte key
+- **Pro:** No password needed; wallet auto-unlocks on the same machine for the same user
+- **Con:** Breaks when pod restarts (machine identity changes); useless if wallet file is copied elsewhere
+- **Use case:** Development, local testing, or machines with stable identity
+
+**Password encryption** (MCP interactive):
+- Encryption key: `PBKDF2(password, 600,000 iterations, SHA-256, 32-byte random salt)` → 32-byte key
+- **Pro:** Password-protected; portable across machines; explicit user intent per session
+- **Con:** Requires user interaction; slower (password hashing) on every session
+- **Use case:** MCP CLI usage, interactive terminals, personal machines
+- **Session caching:** During a CLI session, the password is cached in memory (cleared on exit or `SIGTERM`) to avoid re-prompting for every command
+- **Memory safety:** Password is wiped from memory after key derivation using `buffer.fill(0)` (best-effort; JavaScript GC limitations apply)
+
+**Environment-injected encryption** (A2A containers):
+- Encryption key: Base64-encoded 32-byte key from `PAPERWALL_WALLET_KEY` environment variable
+- **Pro:** Deterministic key derivation (same key across all pod instances); suitable for containerized deployments (K8s, Docker)
+- **Con:** Requires managing secrets in deployment environment; no password fallback
+- **Use case:** A2A servers in containers, CI/CD automation, managed deployments
+- **Key format:** Base64-encoded exactly 32 bytes (e.g., `openssl rand -base64 32`), no whitespace allowed
+- **Multi-instance deployment:** All instances with the same `PAPERWALL_WALLET_KEY` can decrypt the same wallet file, enabling shared wallet access across pod replicas
+
+### OS keychain storage
+
+When using `--keychain`, the private key is stored in the operating system's native credential manager:
+
+- **macOS:** Keychain (via Security framework)
+- **Linux:** GNOME Keyring or KWallet (via Secret Service D-Bus API)
+- **Windows:** Windows Credential Manager
+
+The OS keychain provides its own access control (user login, biometrics, etc.), so no additional encryption mode is applied. The `wallet.json` file still exists but only contains metadata (address, network, `keyStorage: "keychain"`) -- the private key itself is not in the file.
+
+**When to use keychain:**
+- Desktop machines where the OS provides strong credential protection
+- When you want the key protected by your OS login rather than a separate password
+- Machines with biometric authentication (Touch ID, fingerprint readers)
+
+**When NOT to use keychain:**
+- Headless servers or containers (no keychain daemon available)
+- CI/CD environments (use `PAPERWALL_PRIVATE_KEY` env var instead)
+- Shared machines (other users with the same login could access the keychain)
+
+**Availability:** The `@napi-rs/keyring` package is an optional dependency. If the native keychain is unavailable (e.g., no D-Bus on Linux, running in Docker), keychain commands will fail with a descriptive error.
+
+### Security practices
+
 - **Overwrite protection:** `wallet create` and `wallet import` refuse to overwrite an existing wallet unless you pass `--force`, preventing accidental loss of funds.
-- **File permissions:** All your files at `~/.paperwall/` are created with `0o600` (owner read/write only).
+- **File permissions:** All your files at `~/.paperwall/` are created with `0o600` (owner read/write only). The directory itself is `0o700` (owner only).
 - **Budget gates are hard limits.** The agent cannot bypass them -- it declines payments before any signing occurs.
 - **EIP-712 signatures** include a random nonce and a 5-minute validity window to prevent replay attacks.
 - **A2A access control** uses HMAC-based timing-safe comparison to prevent timing attacks on Bearer tokens.
-- **Never commit `PAPERWALL_PRIVATE_KEY` to version control.** Use environment variables or encrypted wallet files.
+- **Never commit `PAPERWALL_PRIVATE_KEY` to version control.** Use environment variables or encrypted wallet files in production.
+- **Never commit `PAPERWALL_WALLET_KEY` to version control.** Store it in your secrets manager (K8s Secrets, AWS Secrets Manager, etc.).
 - **Never import your main wallet.** The agent makes automated payments -- always use a dedicated micropayment wallet.

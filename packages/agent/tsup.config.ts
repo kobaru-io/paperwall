@@ -9,4 +9,5 @@ export default defineConfig({
   treeshake: true,
   clean: true,
   dts: false,
+  external: ['@napi-rs/keyring'],
 });

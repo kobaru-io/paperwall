@@ -293,13 +293,33 @@ Paperwall's scope is: **pay for content, check balance, view history.** Anything
 
 ---
 
-## Agent: Machine-Bound Wallet Encryption
+## Agent: Wallet Encryption and Storage
 
-The agent CLI uses machine-bound encryption instead of password-based encryption for wallet.json. The encryption key is derived from the machine's hostname and user ID via PBKDF2, so the wallet file auto-decrypts on the same machine but is useless if copied elsewhere.
+The agent supports three encryption modes and two storage backends, each designed for a specific deployment scenario:
 
-**Why not passwords:** The agent is called by AI coding assistants as a subprocess -- no TTY, no human. Setting PAPERWALL_PASSWORD in .bashrc is plaintext next to the encrypted file. Machine-bound encryption provides equivalent protection with zero friction.
+### Encryption modes (for file-based storage)
 
-**Trade-offs:** Hostname change = wallet undecryptable (re-create with `wallet create`). Docker containers should use `PAPERWALL_PRIVATE_KEY` env var. Not suitable for shared/multi-user machines.
+| Mode | Key derivation | Use case |
+|------|---------------|----------|
+| **Machine-bound** (default) | PBKDF2(hostname + uid + salt) | Local development, stable machines |
+| **Password** | PBKDF2(user password + random salt) | MCP CLI, interactive terminals |
+| **Environment-injected** | Base64-decoded `PAPERWALL_WALLET_KEY` | Containers, K8s, CI/CD |
+
+**Why machine-bound as default:** The agent is called by AI coding assistants as a subprocess -- no TTY, no human. Setting PAPERWALL_PASSWORD in .bashrc is plaintext next to the encrypted file. Machine-bound encryption provides equivalent protection with zero friction.
+
+**Why password mode:** MCP usage (Claude Code, Cursor) is interactive, so password prompts are acceptable. Password mode makes the wallet portable across machines and gives explicit user control.
+
+**Why environment-injected:** A2A server deployments in containers need deterministic key derivation across pod instances. All pods with the same `PAPERWALL_WALLET_KEY` can decrypt the same wallet file.
+
+### OS keychain storage
+
+As an alternative to encrypted files, the agent can store private keys in the OS native credential manager (macOS Keychain, GNOME Keyring, Windows Credential Manager) via the `@napi-rs/keyring` optional dependency.
+
+**Why a separate storage backend (not an encryption mode):** The keychain is a WHERE (storage location), not a HOW (encryption method). The OS keychain provides its own protection -- adding PBKDF2 encryption on top would be redundant. This distinction keeps the `EncryptionMode` interface clean: encryption modes define key derivation for file-based storage, while keychain is an orthogonal storage choice.
+
+**Why optional dependency:** `@napi-rs/keyring` includes native binaries that may not compile on all platforms. Making it optional means the agent works everywhere (file-based storage is always available), with keychain as an enhancement on supported desktops.
+
+**Trade-offs:** Keychain is unavailable in headless/container environments. The key is stored in plaintext within the OS credential store (protected by OS-level access control, not by Paperwall's own encryption).
 
 ---
 

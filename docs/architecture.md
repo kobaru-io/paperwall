@@ -326,7 +326,7 @@ sequenceDiagram
 
 ## Agent CLI
 
-**Package:** `packages/agent/` | **Key files:** `cli.ts`, `payment-engine.ts`, `wallet.ts`, `budget.ts`, `history.ts`, `storage.ts`, `crypto.ts`
+**Package:** `packages/agent/` | **Key files:** `cli.ts`, `payment-engine.ts`, `wallet.ts`, `budget.ts`, `history.ts`, `storage.ts`, `crypto.ts`, `keychain.ts`, `key-cache.ts`
 
 The Agent CLI replicates the extension's payment capabilities as a headless Node.js tool. It adds budget-based automated payment approval, file-based persistent storage, and support for all payment detection modes including HTTP 402.
 
@@ -335,7 +335,7 @@ The Agent CLI replicates the extension's payment capabilities as a headless Node
 | Feature | Extension | Agent |
 |---------|-----------|-------|
 | Wallet storage | `chrome.storage.local` | `~/.paperwall/wallet.json` (0o600) |
-| Key resolution | Session storage | Env var (`PAPERWALL_PRIVATE_KEY`) or machine-bound decryption |
+| Key resolution | Session storage | Env var > OS keychain > encrypted file (3 encryption modes) |
 | Payment approval | User clicks "Approve" in popup | Budget system (automated) |
 | History format | `chrome.storage.local` array | `~/.paperwall/history.jsonl` |
 | 402 handling | Not supported | `@x402/fetch` integration |
@@ -368,11 +368,17 @@ Budget checks are **hard gates**, not advisory. If any limit is exceeded, the pa
 
 ### Wallet management
 
-The wallet (`wallet.ts`) uses machine-bound encryption (PBKDF2 600k iterations + AES-256-GCM) and stores the result in a JSON file at `~/.paperwall/wallet.json` with `0o600` permissions. The encryption key is derived from the machine's hostname and user ID, so the wallet auto-decrypts on the same machine but is useless if copied elsewhere.
+The wallet (`wallet.ts`) supports two storage backends:
+
+- **Encrypted file** (default) -- Private key encrypted with PBKDF2 (600k iterations) + AES-256-GCM and stored in `~/.paperwall/wallet.json` (0o600). Three encryption modes: machine-bound (key derived from hostname+uid), password (interactive), or environment-injected (`PAPERWALL_WALLET_KEY` env var).
+- **OS keychain** -- Private key stored in the native credential manager (macOS Keychain, GNOME Keyring, Windows Credential Manager) via `@napi-rs/keyring` (optional dependency, dynamic import). The wallet file still contains metadata but not the key.
 
 Key resolution follows a priority chain:
 1. `PAPERWALL_PRIVATE_KEY` env var -- direct key for automation/CI/Docker.
-2. Machine-bound wallet file -- auto-decrypts using host identity.
+2. OS keychain -- if wallet metadata has `keyStorage: "keychain"`.
+3. Encrypted wallet file -- auto-decrypts using the detected encryption mode.
+
+Resolved keys are cached in a process-lifetime `KeyCache` with pending-promise deduplication to prevent concurrent resolver invocations (e.g., double password prompts). The cache is wiped on process exit via `SIGINT`/`SIGTERM` handlers.
 
 If none of these paths succeed, the agent exits with code 3.
 
@@ -539,7 +545,7 @@ sequenceDiagram
 | Brute-force password guessing | 5-attempt lockout with 5-minute cooldown |
 | Weak wallet password | Minimum 12 characters, 3-of-4 character categories required |
 | Replay attack on payment | Random 32-byte nonce per transaction, 300-second validity window |
-| Wallet file theft (agent) | File permissions 0o600, machine-bound encryption (PBKDF2 600k iterations keyed to hostname+uid) -- wallet is useless on a different machine |
+| Wallet file theft (agent) | File permissions 0o600, encryption keyed to machine/password/env var -- wallet is useless without the correct decryption context. Keychain backend delegates protection to the OS credential manager. |
 
 ### Key storage lifecycle
 

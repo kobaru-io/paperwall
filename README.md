@@ -77,8 +77,9 @@ sequenceDiagram
 - **Ultra-low fees** -- SKALE network has ultra-low transaction costs
 - **True micropayments** -- charge as little as $0.001 per article
 - **No account signup** -- readers just install the extension and set a password
-- **Private key never leaves your device** -- wallet is encrypted locally
+- **Private key never leaves your device** -- wallet is encrypted locally (multiple modes: password, env-injected for containers, machine-bound for local)
 - **Open source** -- every line of code is auditable
+- **Works with AI agents** -- CLI tool and A2A server support agent-to-agent payments with structured receipts
 
 ### AP2 reference implementation
 
@@ -133,9 +134,12 @@ curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/a
 
 Build apps and agents that can pay for what they consume. No browsers, no clicks—just the CLI and our A2A server.
 
-**[Agent CLI guide](docs/agent-cli-guide.md)** -- All CLI commands: wallet, budget, fetch, history.
+**[Agent CLI guide](docs/agent-cli-guide.md)** -- All CLI commands: wallet, budget, fetch, history. Includes three wallet encryption modes:
+- **Password mode** for interactive CLI (MCP)
+- **Environment-injected mode** for containers (K8s, Docker)
+- **Machine-bound mode** for local development (backward compatible)
 
-**[A2A server guide](docs/a2a-server-guide.md)** -- Run Paperwall as a server for other AI agents (JSON-RPC, receipts, Docker).
+**[A2A server guide](docs/a2a-server-guide.md)** -- Run Paperwall as a server for other AI agents (JSON-RPC, receipts, Docker). Choose your deployment: local, Docker Compose, or Google Cloud Run.
 
 ### I'm a developer -- I want to contribute or understand the code
 

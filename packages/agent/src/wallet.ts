@@ -9,13 +9,14 @@ import {
   getMachineIdentity,
 } from './modes.js';
 import type { EncryptionModeName } from './modes.js';
-import { wipeBuffer } from './key-wipe.js';
+import { wipeBuffer, wipeString } from './key-wipe.js';
 import {
   getConfigDir,
   readJsonFile,
   writeJsonFile,
 } from './storage.js';
 import { getNetwork } from './networks.js';
+import { KeyCache } from './key-cache.js';
 
 // -- Constants ---
 
@@ -23,6 +24,8 @@ const DEFAULT_NETWORK = 'eip155:324705682';
 const WALLET_FILENAME = 'wallet.json';
 
 // -- Types ---
+
+export type KeyStorage = 'file' | 'keychain';
 
 export interface WalletInfo {
   readonly address: string;
@@ -41,6 +44,14 @@ export interface WalletFile {
   readonly keyIv: string;
   readonly networkId: string;
   readonly encryptionMode?: EncryptionModeName;
+  readonly keyStorage?: KeyStorage;
+}
+
+export interface MigrateResult {
+  readonly address: string;
+  readonly from: KeyStorage;
+  readonly to: KeyStorage;
+  readonly network: string;
 }
 
 export interface BalanceInfo {
@@ -56,6 +67,7 @@ export interface CreateWalletOptions {
   readonly force?: boolean;
   readonly mode?: EncryptionModeName;
   readonly modeInput?: string;
+  readonly keychain?: boolean;
 }
 
 export interface ImportWalletOptions {
@@ -63,6 +75,7 @@ export interface ImportWalletOptions {
   readonly force?: boolean;
   readonly mode?: EncryptionModeName;
   readonly modeInput?: string;
+  readonly keychain?: boolean;
 }
 
 // -- Internal Helpers ---
@@ -80,6 +93,7 @@ function validatePrivateKeyFormat(key: string): asserts key is `0x${string}` {
 }
 
 const detector = new EncryptionModeDetector();
+const keyCache = new KeyCache();
 
 function generatePrivateKeyHex(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -176,6 +190,10 @@ function assertNoExistingWallet(): void {
 
 // -- Public API ---
 
+export function getKeyStorage(wallet: WalletFile): KeyStorage {
+  return wallet.keyStorage ?? 'file';
+}
+
 export async function createWallet(
   networkOrOptions?: string | CreateWalletOptions,
 ): Promise<WalletInfo> {
@@ -189,6 +207,47 @@ export async function createWallet(
 
   if (!opts.force) {
     assertNoExistingWallet();
+  }
+
+  if (opts.keychain) {
+    if (opts.mode && opts.mode !== 'machine-bound') {
+      throw new Error(
+        'Cannot use --keychain with --mode. Keychain storage does not use encryption modes — the OS keychain provides protection.',
+      );
+    }
+
+    const { detectKeychainAvailability, loadKeychainAdapter, KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, KeychainUnavailableError } =
+      await import('./keychain.js');
+    const availability = await detectKeychainAvailability();
+    if (!availability.available) {
+      throw new KeychainUnavailableError(
+        `OS keychain is not available: ${availability.reason}`,
+      );
+    }
+
+    const rawKey = generatePrivateKeyHex();
+    const hexKey = `0x${rawKey}` as `0x${string}`;
+    const account = privateKeyToAccount(hexKey);
+
+    const adapter = await loadKeychainAdapter();
+    if (!adapter) {
+      throw new KeychainUnavailableError('Keychain adapter failed to load');
+    }
+    await adapter.store(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, rawKey);
+    wipeString(rawKey);
+
+    const walletData: WalletFile = {
+      address: account.address,
+      encryptedKey: '',
+      keySalt: '',
+      keyIv: '',
+      networkId,
+      keyStorage: 'keychain',
+    };
+    writeJsonFile(WALLET_FILENAME, walletData);
+
+    const storagePath = path.join(getConfigDir(), WALLET_FILENAME);
+    return { address: account.address, network: networkId, storagePath };
   }
 
   const rawKey = generatePrivateKeyHex();
@@ -232,20 +291,60 @@ export async function importWallet(
   }
 
   // Normalize: strip 0x prefix if present
-  const rawKey = privateKeyHex.startsWith('0x')
+  const normalizedKey = privateKeyHex.startsWith('0x')
     ? privateKeyHex.slice(2)
     : privateKeyHex;
 
   // Validate: must be exactly 64 hex characters
-  if (!/^[0-9a-fA-F]{64}$/.test(rawKey)) {
+  if (!/^[0-9a-fA-F]{64}$/.test(normalizedKey)) {
     throw new Error(
       'Invalid private key: must be 64 hex characters (with optional 0x prefix)',
     );
   }
 
-  const hexKey = `0x${rawKey}` as `0x${string}`;
+  if (opts.keychain) {
+    if (opts.mode && opts.mode !== 'machine-bound') {
+      throw new Error(
+        'Cannot use --keychain with --mode. Keychain storage does not use encryption modes — the OS keychain provides protection.',
+      );
+    }
+
+    const { detectKeychainAvailability, loadKeychainAdapter, KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, KeychainUnavailableError } =
+      await import('./keychain.js');
+    const availability = await detectKeychainAvailability();
+    if (!availability.available) {
+      throw new KeychainUnavailableError(
+        `OS keychain is not available: ${availability.reason}`,
+      );
+    }
+
+    const hexKey = `0x${normalizedKey}` as `0x${string}`;
+    const account = privateKeyToAccount(hexKey);
+
+    const adapter = await loadKeychainAdapter();
+    if (!adapter) {
+      throw new KeychainUnavailableError('Keychain adapter failed to load');
+    }
+    await adapter.store(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, normalizedKey);
+    wipeString(normalizedKey);
+
+    const walletData: WalletFile = {
+      address: account.address,
+      encryptedKey: '',
+      keySalt: '',
+      keyIv: '',
+      networkId,
+      keyStorage: 'keychain',
+    };
+    writeJsonFile(WALLET_FILENAME, walletData);
+
+    const storagePath = path.join(getConfigDir(), WALLET_FILENAME);
+    return { address: account.address, network: networkId, storagePath };
+  }
+
+  const hexKey = `0x${normalizedKey}` as `0x${string}`;
   const account = privateKeyToAccount(hexKey);
-  const encrypted = await encryptWithMode(rawKey, modeName, opts.modeInput);
+  const encrypted = await encryptWithMode(normalizedKey, modeName, opts.modeInput);
 
   const walletData: WalletFile = {
     address: account.address,
@@ -276,15 +375,27 @@ export async function getAddress(): Promise<string> {
 }
 
 /**
- * Resolve the private key for signing transactions.
+ * Resolve the private key for signing transactions (cached).
  *
  * Priority:
  * 1. PAPERWALL_PRIVATE_KEY env var (direct, no decryption)
- * 2. Encrypted wallet file (auto-detects encryption mode)
+ * 2. OS keychain (if wallet keyStorage === 'keychain')
+ * 3. Encrypted wallet file (auto-detects encryption mode)
  *
  * @param modeInput - Mode-specific input (password for password mode). Not needed for machine-bound or env-injected.
  */
 export async function resolvePrivateKey(modeInput?: string): Promise<`0x${string}`> {
+  return keyCache.getOrResolve(() => resolvePrivateKeyUncached(modeInput));
+}
+
+/**
+ * Clear the cached private key. Useful for testing and process cleanup.
+ */
+export function clearKeyCache(): void {
+  keyCache.clear();
+}
+
+async function resolvePrivateKeyUncached(modeInput?: string): Promise<`0x${string}`> {
   // Priority 1: PAPERWALL_PRIVATE_KEY env var
   const envKey = process.env['PAPERWALL_PRIVATE_KEY'];
   if (envKey) {
@@ -292,16 +403,44 @@ export async function resolvePrivateKey(modeInput?: string): Promise<`0x${string
     return envKey as `0x${string}`;
   }
 
-  // Priority 2: Encrypted wallet file with auto-detection
+  // Read wallet file
   const wallet = readJsonFile<WalletFile>(WALLET_FILENAME);
-  if (wallet) {
-    const rawKey = await decryptWithMode(wallet, modeInput);
-    return `0x${rawKey}`;
+  if (!wallet) {
+    throw new Error(
+      'No wallet configured. Run: paperwall wallet create',
+    );
   }
 
-  throw new Error(
-    'No wallet configured. Run: paperwall wallet create',
-  );
+  const storage = getKeyStorage(wallet);
+
+  // Priority 2: OS Keychain
+  if (storage === 'keychain') {
+    const { detectKeychainAvailability, loadKeychainAdapter, KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT } =
+      await import('./keychain.js');
+    const availability = await detectKeychainAvailability();
+    if (!availability.available) {
+      throw new Error(
+        `Wallet is configured to use OS keychain, but keychain is unavailable: ${availability.reason}. ` +
+        'Use PAPERWALL_PRIVATE_KEY env var as a workaround, or migrate with: paperwall wallet migrate to-file',
+      );
+    }
+    const adapter = await loadKeychainAdapter();
+    if (!adapter) {
+      throw new Error('Keychain adapter failed to load after availability check passed.');
+    }
+    const secret = await adapter.retrieve(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+    if (!secret) {
+      throw new Error(
+        'Wallet is configured to use OS keychain, but no key found in keychain. ' +
+        'Re-import your key with: paperwall wallet import --key 0x... --keychain',
+      );
+    }
+    return `0x${secret}`;
+  }
+
+  // Priority 3: Encrypted wallet file (auto-detects encryption mode)
+  const rawKey = await decryptWithMode(wallet, modeInput);
+  return `0x${rawKey}`;
 }
 
 /**
@@ -363,6 +502,145 @@ export async function getBalance(network?: string): Promise<BalanceInfo> {
     balanceFormatted,
     asset: 'USDC',
     network: networkId,
+  };
+}
+
+export async function migrateToKeychain(modeInput?: string): Promise<MigrateResult> {
+  const wallet = readJsonFile<WalletFile>(WALLET_FILENAME);
+  if (!wallet) {
+    throw new Error('No wallet configured. Run: paperwall wallet create');
+  }
+
+  if (getKeyStorage(wallet) === 'keychain') {
+    throw new Error('Wallet already uses keychain storage');
+  }
+
+  const {
+    detectKeychainAvailability,
+    loadKeychainAdapter,
+    KEYCHAIN_SERVICE,
+    KEYCHAIN_ACCOUNT,
+    KeychainUnavailableError,
+  } = await import('./keychain.js');
+
+  const availability = await detectKeychainAvailability();
+  if (!availability.available) {
+    throw new KeychainUnavailableError(
+      `OS keychain is not available: ${availability.reason}`,
+    );
+  }
+
+  // Decrypt from file
+  const rawKey = await decryptWithMode(wallet, modeInput);
+
+  const adapter = await loadKeychainAdapter();
+  if (!adapter) {
+    throw new KeychainUnavailableError('Keychain adapter failed to load');
+  }
+
+  // Store in keychain
+  await adapter.store(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, rawKey);
+
+  // Verify: retrieve and compare
+  const retrieved = await adapter.retrieve(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+  if (retrieved !== rawKey) {
+    await adapter.delete(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+    throw new Error('Keychain verification failed: stored key does not match original');
+  }
+
+  wipeString(rawKey);
+
+  // Rewrite wallet.json
+  const updatedWallet: WalletFile = {
+    address: wallet.address,
+    encryptedKey: '',
+    keySalt: '',
+    keyIv: '',
+    networkId: wallet.networkId,
+    keyStorage: 'keychain',
+  };
+  writeJsonFile(WALLET_FILENAME, updatedWallet);
+
+  clearKeyCache();
+
+  return {
+    address: wallet.address,
+    from: 'file',
+    to: 'keychain',
+    network: wallet.networkId,
+  };
+}
+
+export async function migrateToFile(
+  mode?: EncryptionModeName,
+  modeInput?: string,
+): Promise<MigrateResult> {
+  const wallet = readJsonFile<WalletFile>(WALLET_FILENAME);
+  if (!wallet) {
+    throw new Error('No wallet configured. Run: paperwall wallet create');
+  }
+
+  if (getKeyStorage(wallet) !== 'keychain') {
+    throw new Error('Wallet already uses file storage');
+  }
+
+  const {
+    detectKeychainAvailability,
+    loadKeychainAdapter,
+    KEYCHAIN_SERVICE,
+    KEYCHAIN_ACCOUNT,
+  } = await import('./keychain.js');
+
+  const availability = await detectKeychainAvailability();
+  if (!availability.available) {
+    throw new Error(
+      `OS keychain is not available: ${availability.reason}. Cannot retrieve key for migration.`,
+    );
+  }
+
+  const adapter = await loadKeychainAdapter();
+  if (!adapter) {
+    throw new Error('Keychain adapter failed to load');
+  }
+
+  const rawKey = await adapter.retrieve(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+  if (!rawKey) {
+    throw new Error('No key found in keychain. Cannot migrate.');
+  }
+
+  const modeName: EncryptionModeName = mode ?? 'machine-bound';
+  const encrypted = await encryptWithMode(rawKey, modeName, modeInput);
+
+  const updatedWallet: WalletFile = {
+    address: wallet.address,
+    encryptedKey: encrypted.encryptedKey,
+    keySalt: encrypted.keySalt,
+    keyIv: encrypted.keyIv,
+    networkId: wallet.networkId,
+    encryptionMode: modeName,
+    keyStorage: 'file',
+  };
+  writeJsonFile(WALLET_FILENAME, updatedWallet);
+
+  // Verify: decrypt from file and compare
+  const decrypted = await decryptWithMode(updatedWallet, modeInput);
+  if (decrypted !== rawKey) {
+    // Restore original wallet.json
+    writeJsonFile(WALLET_FILENAME, wallet);
+    throw new Error('File verification failed: decrypted key does not match original');
+  }
+
+  // Delete keychain entry
+  await adapter.delete(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+
+  wipeString(rawKey);
+  clearKeyCache();
+
+  return {
+    address: wallet.address,
+    from: 'keychain',
+    to: 'file',
+    network: wallet.networkId,
   };
 }
 

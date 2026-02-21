@@ -87,9 +87,9 @@ This document outlines development priorities for Paperwall, organized by timeli
 - **Stats/analytics tab** - Spending trends, top sites, monthly totals
 
 ### 5. NPM Package Publication
-- **`@paperwall/agent` on npm** - One-command install via `npm install -g @paperwall/agent`
+- **`@kobaru/paperwall` on npm** - One-command install via `npm install -g @kobaru/paperwall`
 - **Zero-build installation** - Eliminates need to clone repo and run `npm run build`
-- **`npx @paperwall/agent fetch ...` support** - Run CLI without global install
+- **`npx @kobaru/paperwall fetch ...` support** - Run CLI without global install
 - **Easier CI/CD integration** - Dependencies handled by npm, not git
 - **Semantic versioning** - Clear version history and upgrade path
 

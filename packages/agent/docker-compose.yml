@@ -6,7 +6,11 @@ services:
     ports:
       - "${PAPERWALL_PORT:-4000}:4000"
     environment:
-      - PAPERWALL_PRIVATE_KEY=${PAPERWALL_PRIVATE_KEY}
+      # Wallet encryption (choose one):
+      # Option 1: Direct private key (raw key in memory)
+      # - PAPERWALL_PRIVATE_KEY=${PAPERWALL_PRIVATE_KEY}
+      # Option 2: Environment-injected encryption (recommended for containers)
+      - PAPERWALL_WALLET_KEY=${PAPERWALL_WALLET_KEY}
       - PAPERWALL_PORT=4000
       - PAPERWALL_HOST=0.0.0.0
       - PAPERWALL_NETWORK=${PAPERWALL_NETWORK:-eip155:324705682}

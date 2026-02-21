@@ -38,3 +38,8 @@ export { wipeBuffer, wipeString } from './key-wipe.js';
 
 export type { EncryptedKey } from './crypto.js';
 export { generatePrivateKey, getMachineIdentity, encryptKey, decryptKey } from './crypto.js';
+
+// -- Wallet ---
+
+export type { WalletInfo, WalletFile, BalanceInfo, CreateWalletOptions, ImportWalletOptions } from './wallet.js';
+export { createWallet, importWallet, getAddress, resolvePrivateKey, getBalance, getWalletEncryptionMode } from './wallet.js';
