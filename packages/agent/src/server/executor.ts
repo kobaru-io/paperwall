@@ -127,7 +127,7 @@ function extractParams(message: Message): {
 } {
   // Try data part first (structured input)
   for (const part of message.parts) {
-    if (part.kind === 'data') {
+    if (part.kind === 'data' && part.data != null && typeof part.data === 'object') {
       const data = part.data as Record<string, unknown>;
       return {
         url: typeof data['url'] === 'string' ? data['url'] : null,

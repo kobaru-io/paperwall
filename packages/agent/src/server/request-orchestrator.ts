@@ -125,6 +125,7 @@ export async function orchestrateFetch(
       'requestedAmountFormatted' in result
         ? (result.requestedAmountFormatted ?? '0.00')
         : '0.00';
+    const budgetReason = 'budgetReason' in result ? result.budgetReason : undefined;
     event = {
       type: 'declined',
       url: result.url,
@@ -132,7 +133,7 @@ export async function orchestrateFetch(
       authorization: { ...authContext, requestedAmount },
       decline: {
         reason: result.error as 'budget_exceeded' | 'max_price_exceeded',
-        limit: mapErrorToLimit(result.error),
+        limit: mapErrorToLimit(result.error, budgetReason),
         limitValue:
           authContext.perRequestLimit ??
           authContext.dailyLimit ??
@@ -193,7 +194,11 @@ function buildAuthorizationContext(
 
 function mapErrorToLimit(
   error: string,
+  budgetReason?: string,
 ): 'per_request' | 'daily' | 'total' | 'max_price' {
   if (error === 'max_price_exceeded') return 'max_price';
+  if (budgetReason === 'daily') return 'daily';
+  if (budgetReason === 'total') return 'total';
+  if (budgetReason === 'max_price') return 'max_price';
   return 'per_request';
 }

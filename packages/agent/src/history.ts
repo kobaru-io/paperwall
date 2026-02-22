@@ -35,10 +35,10 @@ export function getRecent(count?: number): HistoryEntry[] {
 }
 
 /**
- * Sum all payment amounts where ts falls on today's date (UTC).
- * Returns the total in smallest units as a string.
+ * Read history once and return both today's total and lifetime total.
+ * Both values are in smallest units as strings.
  */
-export function getTodayTotal(): string {
+export function getSpendingTotals(): { today: string; lifetime: string; count: number } {
   const entries = readJsonlFile<HistoryEntry>(HISTORY_FILENAME);
 
   const now = new Date();
@@ -49,16 +49,31 @@ export function getTodayTotal(): string {
     0, 0, 0, 0,
   ));
 
-  let total = 0n;
+  let todayTotal = 0n;
+  let lifetimeTotal = 0n;
 
   for (const entry of entries) {
+    const amount = BigInt(entry.amount);
+    lifetimeTotal += amount;
     const entryDate = new Date(entry.ts);
     if (entryDate.getTime() >= todayStart.getTime()) {
-      total += BigInt(entry.amount);
+      todayTotal += amount;
     }
   }
 
-  return total.toString();
+  return {
+    today: todayTotal.toString(),
+    lifetime: lifetimeTotal.toString(),
+    count: entries.length,
+  };
+}
+
+/**
+ * Sum all payment amounts where ts falls on today's date (UTC).
+ * Returns the total in smallest units as a string.
+ */
+export function getTodayTotal(): string {
+  return getSpendingTotals().today;
 }
 
 /**
@@ -66,13 +81,5 @@ export function getTodayTotal(): string {
  * Returns the total in smallest units as a string.
  */
 export function getLifetimeTotal(): string {
-  const entries = readJsonlFile<HistoryEntry>(HISTORY_FILENAME);
-
-  let total = 0n;
-
-  for (const entry of entries) {
-    total += BigInt(entry.amount);
-  }
-
-  return total.toString();
+  return getSpendingTotals().lifetime;
 }

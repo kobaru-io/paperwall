@@ -165,7 +165,7 @@ describe('wallet', () => {
     });
 
     it('should throw if no wallet exists', async () => {
-      await expect(getAddress()).rejects.toThrow();
+      await expect(getAddress()).rejects.toThrow('No wallet configured');
     });
   });
 
@@ -268,7 +268,7 @@ describe('wallet', () => {
     it('should reject password mode with weak password', async () => {
       await expect(
         createWallet({ mode: 'password', modeInput: 'short' }),
-      ).rejects.toThrow();
+      ).rejects.toThrow('Password must be at least');
     });
 
     it('should create wallet with mode and custom network', async () => {
@@ -387,7 +387,7 @@ describe('wallet', () => {
     it('should fail to decrypt password wallet with wrong password', async () => {
       const password = 'my-strong-password-123';
       await importWallet(`0x${testKey}`, { mode: 'password', modeInput: password });
-      await expect(resolvePrivateKey('wrong-password-456')).rejects.toThrow();
+      await expect(resolvePrivateKey('wrong-password-456')).rejects.toThrow('Decryption failed');
     });
 
     it('should still prefer PAPERWALL_PRIVATE_KEY over encrypted wallet', async () => {
@@ -441,7 +441,7 @@ describe('wallet', () => {
     });
 
     it('should throw on unsupported network', async () => {
-      await expect(createWallet('eip155:999999999')).rejects.toThrow();
+      await expect(createWallet('eip155:999999999')).rejects.toThrow('unsupported network');
     });
 
     it('should throw on invalid private key format for import', async () => {
@@ -457,7 +457,7 @@ describe('wallet', () => {
       process.env['PAPERWALL_WALLET_KEY'] = envKey;
       await createWallet({ mode: 'env-injected' });
       delete process.env['PAPERWALL_WALLET_KEY'];
-      await expect(resolvePrivateKey()).rejects.toThrow();
+      await expect(resolvePrivateKey()).rejects.toThrow('PAPERWALL_WALLET_KEY');
     });
 
     it('should fail to decrypt env-injected wallet with wrong env var', async () => {
@@ -465,7 +465,7 @@ describe('wallet', () => {
       process.env['PAPERWALL_WALLET_KEY'] = envKey;
       await createWallet({ mode: 'env-injected' });
       process.env['PAPERWALL_WALLET_KEY'] = crypto.randomBytes(32).toString('base64');
-      await expect(resolvePrivateKey()).rejects.toThrow();
+      await expect(resolvePrivateKey()).rejects.toThrow('Decryption failed');
     });
   });
 

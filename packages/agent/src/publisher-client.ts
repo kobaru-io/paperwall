@@ -7,6 +7,7 @@
  */
 
 import type { PaymentPayload } from './facilitator.js';
+import { assertAllowedUrl } from './url-validation.js';
 
 export interface PublisherPaymentResponse {
   readonly success: true;
@@ -32,6 +33,7 @@ export async function submitPayment(
   paymentUrl: string,
   paymentPayload: PaymentPayload,
 ): Promise<PublisherPaymentResponse> {
+  assertAllowedUrl(paymentUrl, 'Payment URL');
   const response = await fetch(paymentUrl, {
     method: 'POST',
     headers: {

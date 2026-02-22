@@ -12,6 +12,7 @@ import type {
   SettleResponse as X402SettleResponse,
   SupportedResponse as X402SupportedResponse,
 } from '@x402/core/types';
+import { assertAllowedUrl } from './url-validation.js';
 
 export type { X402PaymentPayload as PaymentPayload, X402PaymentRequirements as PaymentRequirements };
 
@@ -42,6 +43,7 @@ export async function getSupported(
   siteKey: string,
   network: string,
 ): Promise<EIP712DomainInfo> {
+  assertAllowedUrl(facilitatorUrl, 'Facilitator URL');
   const url = `${facilitatorUrl}/supported`;
 
   const headers: Record<string, string> = {};
@@ -74,10 +76,17 @@ export async function getSupported(
     throw new Error(`No EIP-712 domain info for network ${network}`);
   }
 
+  const name = extra['name'];
+  const version = extra['version'];
+  const asset = extra['asset'];
+  if (typeof name !== 'string' || typeof version !== 'string' || typeof asset !== 'string') {
+    throw new Error(`Incomplete EIP-712 domain info for network ${network}: missing name, version, or asset`);
+  }
+
   return {
-    name: extra['name'] as string,
-    version: extra['version'] as string,
-    verifyingContract: extra['asset'] as string,
+    name,
+    version,
+    verifyingContract: asset,
     extra,
   };
 }
@@ -98,6 +107,7 @@ export async function settle(
   paymentPayload: X402PaymentPayload,
   paymentRequirements: X402PaymentRequirements,
 ): Promise<SettleResult> {
+  assertAllowedUrl(facilitatorUrl, 'Facilitator URL');
   const url = `${facilitatorUrl}/settle`;
 
   const settleHeaders: Record<string, string> = {

@@ -38,7 +38,7 @@ packages/*/CLAUDE.md
 
 # -- Pre-dev research --
 docs/pre-dev/
-
+docs/codereview/
 # -- Misc --
 *.swp
 *.swo

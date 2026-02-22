@@ -17,6 +17,7 @@ import { submitPayment } from './publisher-client.js';
 import { resolvePrivateKey } from './wallet.js';
 import { checkBudget, smallestToUsdc } from './budget.js';
 import { appendPayment } from './history.js';
+import { acquireLock } from './storage.js';
 import { log } from './logger.js';
 import { getExpectedAsset } from './networks.js';
 
@@ -53,6 +54,7 @@ interface FetchDeclined {
   readonly url: string;
   readonly requestedAmount?: string;
   readonly requestedAmountFormatted?: string;
+  readonly budgetReason?: 'per_request' | 'daily' | 'total' | 'max_price' | 'no_budget';
 }
 
 interface FetchError {
@@ -143,34 +145,38 @@ export async function fetchWithPayment(
 
   log(`Payment detected: ${smallestToUsdc(accept.amount)} USDC (${metaTag.mode} mode)`);
 
-  // Step 5a: Check budget (shared by client and server modes)
-  const budgetCheck = checkBudget(accept.amount, options.maxPrice);
-  if (!budgetCheck.allowed) {
-    return buildBudgetDeclined(url, accept.amount, budgetCheck);
-  }
-
-  log(`Budget check: OK`);
-
-  if (metaTag.mode === 'client') {
-    return handleClientMode(url, response.status, contentType, html, metaTag, accept);
-  }
-
-  if (metaTag.mode === 'server') {
-    if (!metaTag.paymentUrl) {
-      return {
-        ok: false,
-        error: 'missing_payment_url',
-        message: 'Server mode requires paymentUrl in meta tag but none was found',
-        url,
-      };
+  // Step 5a: Check budget under lock (prevents TOCTOU race in concurrent requests)
+  const releaseLock = await acquireLock('budget');
+  try {
+    const budgetCheck = checkBudget(accept.amount, options.maxPrice);
+    if (!budgetCheck.allowed) {
+      return buildBudgetDeclined(url, accept.amount, budgetCheck);
     }
-    return handleServerMode(
-      url,
-      response.status,
-      { facilitatorUrl: metaTag.facilitatorUrl, siteKey: metaTag.siteKey, paymentUrl: metaTag.paymentUrl },
-      accept,
-    );
 
+    log(`Budget check: OK`);
+
+    if (metaTag.mode === 'client') {
+      return await handleClientMode(url, response.status, contentType, html, metaTag, accept);
+    }
+
+    if (metaTag.mode === 'server') {
+      if (!metaTag.paymentUrl) {
+        return {
+          ok: false,
+          error: 'missing_payment_url',
+          message: 'Server mode requires paymentUrl in meta tag but none was found',
+          url,
+        };
+      }
+      return await handleServerMode(
+        url,
+        response.status,
+        { facilitatorUrl: metaTag.facilitatorUrl, siteKey: metaTag.siteKey, paymentUrl: metaTag.paymentUrl },
+        accept,
+      );
+    }
+  } finally {
+    releaseLock();
   }
 
   return {
@@ -210,11 +216,12 @@ function buildBudgetDeclined(
 
   return {
     ok: false,
-    error: 'budget_exceeded',
+    error: reason === 'max_price' ? 'max_price_exceeded' : 'budget_exceeded',
     message,
     url,
     requestedAmount: amount,
     requestedAmountFormatted: smallestToUsdc(amount),
+    budgetReason: reason as FetchDeclined['budgetReason'],
   };
 }
 

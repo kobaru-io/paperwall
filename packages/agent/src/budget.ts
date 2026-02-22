@@ -1,5 +1,5 @@
 import { readJsonFile, writeJsonFile } from './storage.js';
-import { getTodayTotal, getLifetimeTotal } from './history.js';
+import { getTodayTotal, getLifetimeTotal, getSpendingTotals } from './history.js';
 
 const BUDGET_FILENAME = 'budget.json';
 const USDC_DECIMALS = 6;
@@ -121,31 +121,34 @@ export function checkBudget(amountSmallest: string, maxPrice?: string): BudgetCh
     }
   }
 
-  // Check daily limit
-  if (budget.dailyMax) {
-    const dailyLimit = BigInt(usdcToSmallest(budget.dailyMax));
-    const todaySpent = BigInt(getTodayTotal());
-    if (todaySpent + amount > dailyLimit) {
-      return {
-        allowed: false,
-        reason: 'daily',
-        limit: dailyLimit.toString(),
-        spent: todaySpent.toString(),
-      };
-    }
-  }
+  // Check daily and total limits (single file read for both)
+  if (budget.dailyMax || budget.totalMax) {
+    const totals = getSpendingTotals();
 
-  // Check total/lifetime limit
-  if (budget.totalMax) {
-    const totalLimit = BigInt(usdcToSmallest(budget.totalMax));
-    const lifetimeSpent = BigInt(getLifetimeTotal());
-    if (lifetimeSpent + amount > totalLimit) {
-      return {
-        allowed: false,
-        reason: 'total',
-        limit: totalLimit.toString(),
-        spent: lifetimeSpent.toString(),
-      };
+    if (budget.dailyMax) {
+      const dailyLimit = BigInt(usdcToSmallest(budget.dailyMax));
+      const todaySpent = BigInt(totals.today);
+      if (todaySpent + amount > dailyLimit) {
+        return {
+          allowed: false,
+          reason: 'daily',
+          limit: dailyLimit.toString(),
+          spent: todaySpent.toString(),
+        };
+      }
+    }
+
+    if (budget.totalMax) {
+      const totalLimit = BigInt(usdcToSmallest(budget.totalMax));
+      const lifetimeSpent = BigInt(totals.lifetime);
+      if (lifetimeSpent + amount > totalLimit) {
+        return {
+          allowed: false,
+          reason: 'total',
+          limit: totalLimit.toString(),
+          spent: lifetimeSpent.toString(),
+        };
+      }
     }
   }
 

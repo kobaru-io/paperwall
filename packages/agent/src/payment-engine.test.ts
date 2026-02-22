@@ -223,7 +223,7 @@ describe('fetchWithPayment', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
-    expect(result.error).toBe('budget_exceeded');
+    expect(result.error).toBe('max_price_exceeded');
   });
 
   it('should decline when no budget configured and no --max-price', async () => {

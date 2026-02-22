@@ -3,13 +3,30 @@ import { createWallet, importWallet, getAddress, getBalance, getKeyStorage, migr
 import { EncryptionModeDetector } from './modes.js';
 import type { EncryptionModeName } from './modes.js';
 import { setBudget, getBudget, smallestToUsdc, usdcToSmallest } from './budget.js';
-import { getRecent, getTodayTotal, getLifetimeTotal } from './history.js';
-import { readJsonFile, readJsonlFile } from './storage.js';
+import { getRecent, getSpendingTotals } from './history.js';
+import { readJsonFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
 import { fetchWithPayment } from './payment-engine.js';
 
-import type { HistoryEntry } from './history.js';
 import type { WalletFile } from './wallet.js';
+
+// -- Internal Helpers ---
+
+function handleError(
+  error: unknown,
+  defaultCode: string,
+  exitCode: number,
+  walletCheck?: boolean,
+): void {
+  const message = error instanceof Error ? error.message : String(error);
+  if (walletCheck && message.includes('No wallet')) {
+    outputError('no_wallet', message, 3);
+  } else {
+    outputError(defaultCode, message, exitCode);
+  }
+}
+
+// -- Public API ---
 
 export function buildProgram(): Command {
   const program = new Command();
@@ -44,8 +61,7 @@ export function buildProgram(): Command {
           keyStorage,
         });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('wallet_create_failed', message, 1);
+        handleError(error, 'wallet_create_failed', 1);
       }
     });
 
@@ -69,8 +85,7 @@ export function buildProgram(): Command {
           keyStorage,
         });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('wallet_import_failed', message, 1);
+        handleError(error, 'wallet_import_failed', 1);
       }
     });
 
@@ -90,12 +105,7 @@ export function buildProgram(): Command {
           network: result.network,
         });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('No wallet configured')) {
-          outputError('no_wallet', message, 3);
-        } else {
-          outputError('balance_error', message, 1);
-        }
+        handleError(error, 'balance_error', 1, true);
       }
     });
 
@@ -107,12 +117,7 @@ export function buildProgram(): Command {
         const address = await getAddress();
         outputJson({ ok: true, address });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('No wallet configured')) {
-          outputError('no_wallet', message, 3);
-        } else {
-          outputError('address_error', message, 1);
-        }
+        handleError(error, 'address_error', 1, true);
       }
     });
 
@@ -135,8 +140,7 @@ export function buildProgram(): Command {
           encryptionMode: storage === 'keychain' ? null : (walletFile.encryptionMode ?? 'machine-bound'),
         });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('wallet_info_failed', message, 1);
+        handleError(error, 'wallet_info_failed', 1);
       }
     });
 
@@ -154,8 +158,7 @@ export function buildProgram(): Command {
         const result = await migrateToKeychain();
         outputJson({ ok: true, ...result });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('migration_failed', message, 1);
+        handleError(error, 'migration_failed', 1);
       }
     });
 
@@ -172,8 +175,7 @@ export function buildProgram(): Command {
         const result = await migrateToFile(options.mode);
         outputJson({ ok: true, ...result });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('migration_failed', message, 1);
+        handleError(error, 'migration_failed', 1);
       }
     });
 
@@ -211,8 +213,7 @@ export function buildProgram(): Command {
         const result = setBudget(partial);
         outputJson({ ok: true, budget: result });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('budget_set_failed', message, 1);
+        handleError(error, 'budget_set_failed', 1);
       }
     });
 
@@ -232,24 +233,24 @@ export function buildProgram(): Command {
           return;
         }
 
-        const todaySmallest = getTodayTotal();
-        const lifetimeSmallest = getLifetimeTotal();
-        const allEntries = readJsonlFile<HistoryEntry>('history.jsonl');
+        const totals = getSpendingTotals();
 
-        const todayUsdc = smallestToUsdc(todaySmallest);
-        const totalUsdc = smallestToUsdc(lifetimeSmallest);
+        const todayUsdc = smallestToUsdc(totals.today);
+        const totalUsdc = smallestToUsdc(totals.lifetime);
 
-        // Compute remaining for daily and total (if configured)
-        const dailyRemaining = budgetConfig.dailyMax
-          ? smallestToUsdc(
-            (BigInt(usdcToSmallest(budgetConfig.dailyMax)) - BigInt(todaySmallest)).toString(),
-          )
+        // Compute remaining for daily and total (clamped to 0)
+        const dailyRaw = budgetConfig.dailyMax
+          ? BigInt(usdcToSmallest(budgetConfig.dailyMax)) - BigInt(totals.today)
+          : null;
+        const dailyRemaining = dailyRaw !== null
+          ? smallestToUsdc((dailyRaw < 0n ? 0n : dailyRaw).toString())
           : undefined;
 
-        const totalRemaining = budgetConfig.totalMax
-          ? smallestToUsdc(
-            (BigInt(usdcToSmallest(budgetConfig.totalMax)) - BigInt(lifetimeSmallest)).toString(),
-          )
+        const totalRaw = budgetConfig.totalMax
+          ? BigInt(usdcToSmallest(budgetConfig.totalMax)) - BigInt(totals.lifetime)
+          : null;
+        const totalRemaining = totalRaw !== null
+          ? smallestToUsdc((totalRaw < 0n ? 0n : totalRaw).toString())
           : undefined;
 
         outputJson({
@@ -258,7 +259,7 @@ export function buildProgram(): Command {
           spent: {
             today: todayUsdc,
             total: totalUsdc,
-            transactionCount: allEntries.length,
+            transactionCount: totals.count,
           },
           remaining: {
             daily: dailyRemaining ?? '0.00',
@@ -266,8 +267,7 @@ export function buildProgram(): Command {
           },
         });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('budget_status_failed', message, 1);
+        handleError(error, 'budget_status_failed', 1);
       }
     });
 
@@ -280,7 +280,7 @@ export function buildProgram(): Command {
     .action((options: { last: string }) => {
       try {
         const count = parseInt(options.last, 10);
-        const allEntries = readJsonlFile<HistoryEntry>('history.jsonl');
+        const totals = getSpendingTotals();
         const entries = getRecent(count);
 
         const payments = entries.map((entry) => ({
@@ -297,11 +297,10 @@ export function buildProgram(): Command {
         outputJson({
           ok: true,
           payments,
-          total: allEntries.length,
+          total: totals.count,
         });
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('history_error', message, 1);
+        handleError(error, 'history_error', 1);
       }
     });
 
@@ -319,7 +318,7 @@ export function buildProgram(): Command {
         const result = await fetchWithPayment(url, {
           maxPrice: options.maxPrice,
           network: options.network,
-          timeout: parseInt(options.timeout, 10),
+          timeout: Number.isNaN(parseInt(options.timeout, 10)) ? 30000 : parseInt(options.timeout, 10),
         });
 
         if (result.ok) {
@@ -399,17 +398,7 @@ export function buildProgram(): Command {
           process.on('SIGTERM', shutdown);
           process.on('SIGINT', shutdown);
         } catch (error: unknown) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          if (message.includes('No wallet')) {
-            outputError('no_wallet', message, 3);
-          } else {
-            outputError(
-              'server_error',
-              `Failed to start server: ${message}`,
-              1,
-            );
-          }
+          handleError(error, 'server_error', 1, true);
         }
       },
     );
@@ -435,17 +424,7 @@ export function buildProgram(): Command {
           const { startMcpServer } = await import('./mcp/index.js');
           await startMcpServer();
         } catch (error: unknown) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          if (message.includes('No wallet')) {
-            outputError('no_wallet', message, 3);
-          } else {
-            outputError(
-              'mcp_error',
-              `Failed to start MCP server: ${message}`,
-              1,
-            );
-          }
+          handleError(error, 'mcp_error', 1, true);
         }
       },
     );
@@ -464,8 +443,7 @@ export function buildProgram(): Command {
         const { runSetup } = await import('./setup.js');
         await runSetup(options);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        outputError('setup_failed', message, 1);
+        handleError(error, 'setup_failed', 1);
       }
     });
 
@@ -489,9 +467,7 @@ export function buildProgram(): Command {
           const { runDemo } = await import('./server/demo-client.js');
           await runDemo(options);
         } catch (error: unknown) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          outputError('demo_error', message, 1);
+          handleError(error, 'demo_error', 1);
         }
       },
     );

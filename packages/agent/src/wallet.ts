@@ -16,6 +16,7 @@ import {
   writeJsonFile,
 } from './storage.js';
 import { getNetwork } from './networks.js';
+import { smallestToUsdc } from './budget.js';
 import { KeyCache } from './key-cache.js';
 
 // -- Constants ---
@@ -94,6 +95,7 @@ function validatePrivateKeyFormat(key: string): asserts key is `0x${string}` {
 
 const detector = new EncryptionModeDetector();
 const keyCache = new KeyCache();
+keyCache.registerExitHandler();
 
 function generatePrivateKeyHex(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -494,7 +496,7 @@ export async function getBalance(network?: string): Promise<BalanceInfo> {
 
   const hexBalance = json.result;
   const balance = (!hexBalance || hexBalance === '0x') ? 0n : BigInt(hexBalance);
-  const balanceFormatted = formatUsdc(balance);
+  const balanceFormatted = smallestToUsdc(balance.toString());
 
   return {
     address: wallet.address,
@@ -644,10 +646,3 @@ export async function migrateToFile(
   };
 }
 
-function formatUsdc(smallestUnit: bigint): string {
-  const divisor = 1_000_000n;
-  const whole = smallestUnit / divisor;
-  const remainder = smallestUnit % divisor;
-  const decimal = remainder.toString().padStart(6, '0').replace(/0+$/, '') || '0';
-  return `${whole}.${decimal.length < 2 ? decimal.padEnd(2, '0') : decimal}`;
-}

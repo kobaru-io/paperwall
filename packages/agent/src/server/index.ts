@@ -76,11 +76,22 @@ export async function createServer(
     agentCardHandler({ agentCardProvider: handler }),
   );
 
-  // RPC endpoint protected by access gate
-  // TODO: Add per-key rate limiting (future work — important for public deployments)
+  // RPC rate limiter: 30 requests per minute per IP
+  const rpcRateLimit = createRateLimiter(30, 60_000);
+  function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    if (!rpcRateLimit(ip)) {
+      res.status(429).json({ error: 'rate_limit_exceeded', message: 'Too many requests' });
+      return;
+    }
+    next();
+  }
+
+  // RPC endpoint protected by access gate + rate limiter
   app.use(
     '/rpc',
     accessGate,
+    rateLimitMiddleware,
     jsonRpcHandler({
       requestHandler: handler,
       userBuilder: UserBuilder.noAuthentication,
@@ -139,4 +150,47 @@ export async function createServer(
   const url = `http://${displayHost}:${actualPort}`;
 
   return { httpServer, port: actualPort, url };
+}
+
+// -- Internal Helpers ---
+
+/**
+ * Simple in-memory sliding-window rate limiter.
+ * Returns a function that returns true if the request is allowed.
+ */
+function createRateLimiter(
+  maxRequests: number,
+  windowMs: number,
+): (key: string) => boolean {
+  const windows = new Map<string, number[]>();
+
+  // Periodic cleanup to prevent memory leaks from stale IPs
+  const cleanupInterval = setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [key, timestamps] of windows) {
+      const filtered = timestamps.filter((t) => t > cutoff);
+      if (filtered.length === 0) {
+        windows.delete(key);
+      } else {
+        windows.set(key, filtered);
+      }
+    }
+  }, windowMs).unref();
+  // Keep reference to allow cleanup in tests if needed
+  void cleanupInterval;
+
+  return (key: string): boolean => {
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    const timestamps = (windows.get(key) ?? []).filter((t) => t > cutoff);
+
+    if (timestamps.length >= maxRequests) {
+      windows.set(key, timestamps);
+      return false;
+    }
+
+    timestamps.push(now);
+    windows.set(key, timestamps);
+    return true;
+  };
 }
