@@ -71,10 +71,10 @@ paperwall --help
 
 ### Full guided setup
 
-The installer walks you through wallet creation, budget configuration, and AI client integration (MCP or skill):
+After installing, run the interactive setup wizard to configure your wallet, budget, and AI client integration:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
+paperwall setup
 ```
 
 ### From source

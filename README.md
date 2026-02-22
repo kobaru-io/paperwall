@@ -128,16 +128,11 @@ You use Claude Code, Gemini CLI, Cursor, Antigravity, or another AI agent and wa
 npx @kobaru/paperwall --help
 ```
 
-**Install globally:**
+**Install and set up:**
 
 ```bash
 npm install -g @kobaru/paperwall
-```
-
-**Full guided setup** (wallet, budget, AI client integration):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
+paperwall setup
 ```
 
 **[MCP server guide](docs/mcp-server-guide.md)** -- Recommended. Native tool calls and live resources via MCP protocol.

@@ -63,7 +63,7 @@ graph TB
         CLI --- A2A
     end
 
-    Skill["AI Agent Skill<br/>install.sh<br/>Claude Code / Gemini CLI"]
+    Skill["AI Agent Skill<br/>paperwall setup<br/>Claude Code / Gemini CLI"]
     Skill -->|invokes CLI| CLI
 
     CLI -.->|Same facilitator| Facilitator
@@ -394,18 +394,17 @@ All agent data lives in `~/.paperwall/` (created with `0o700` permissions). File
 
 ## AI agent skill
 
-**Package:** `packages/agent/` | **Key files:** `install.sh`, `skills/paperwall/SKILL.md`, `skills/paperwall/references/cli-reference.md`
+**Package:** `packages/agent/` | **Key files:** `src/setup.ts`, `src/setup/platform.ts`, `src/setup/config-writers.ts`, `skills/paperwall/SKILL.md`, `skills/paperwall/references/cli-reference.md`
 
-The AI agent skill is the integration layer between the Agent CLI and AI coding agents like Claude Code and Gemini CLI. It consists of an installer script and a skill directory that teaches the AI agent how and when to use the `paperwall` CLI.
+The AI agent skill is the integration layer between the Agent CLI and AI coding agents like Claude Code and Gemini CLI. It consists of an interactive setup wizard (`paperwall setup`) and a skill directory that teaches the AI agent how and when to use the `paperwall` CLI.
 
-### How the installer works
+### How the setup wizard works
 
-The `install.sh` script takes a single argument (`claude` or `gemini`) and performs four steps:
+The `paperwall setup` command walks you through three steps:
 
-1. **Build and link** -- Runs `npm run build` in the agent package, then symlinks `dist/cli.js` to `~/.local/bin/paperwall`. No sudo required.
-2. **Symlink the skill** -- Creates a symlink from the agent's skill directory (`~/.claude/skills/paperwall` or `~/.gemini/skills/paperwall`) to the `skills/paperwall/` directory in the package. Symlinks mean the skill stays up to date when the repo is pulled.
-3. **Wallet setup** -- Prompts the user to create a new wallet or import an existing private key.
-4. **Budget setup** -- Prompts the user to configure per-request, daily, and lifetime spending limits.
+1. **AI client integration** -- Choose your AI client (Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop, Gemini CLI, Antigravity). The wizard writes the MCP config and instructions file for your chosen client. Skill-based installation is also available for Claude Code and Gemini CLI.
+2. **Wallet setup** -- Create a new wallet or import an existing private key.
+3. **Budget setup** -- Configure per-request, daily, and lifetime spending limits.
 
 ### Skill definition
 

@@ -572,46 +572,22 @@ The command validates that a wallet exists before starting. If no wallet is foun
 
 ## Automated install
 
-If you just need the CLI, the fastest option is npm:
+Install the CLI and run the interactive setup wizard:
 
 ```bash
 npm install -g @kobaru/paperwall
+paperwall setup
 ```
 
-For a full guided setup (wallet, budget, and MCP client configuration in one step), use the installer script:
+The setup wizard prompts you to choose your AI client (Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop, Gemini CLI, Antigravity, or print config for other clients). Both MCP and skill-based options are available in a single list.
 
-**macOS / Linux:**
+The wizard:
+1. Writes the MCP config to the appropriate file for your client
+2. Adds Paperwall instructions to your client's global instructions file (Claude Code: `~/.claude/CLAUDE.md`, Codex: `~/.codex/AGENTS.md`, Gemini CLI / Antigravity: `~/.gemini/GEMINI.md`). This tells the AI assistant to prefer Paperwall's `fetch_url` tool over any built-in web fetch when accessing URLs.
+3. Walks you through wallet creation (encrypted, no password)
+4. Prompts for spending limits (per-request, daily, total)
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
-```
-
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.ps1 | iex
-```
-
-**From source** (if you already cloned the repo):
-
-```bash
-git clone https://github.com/kobaru-io/paperwall.git
-cd paperwall
-npm install
-bash packages/agent/install.sh       # macOS / Linux
-# pwsh packages/agent/install.ps1    # Windows
-```
-
-The installer prompts you to choose your AI client (Claude Code, Cursor, Windsurf, Codex, OpenCode, Claude Desktop, Gemini CLI, Antigravity, or print config for other clients). Both MCP and skill-based options are available in a single list.
-
-The installer:
-1. Builds the CLI and installs it (`~/.local/bin/paperwall` on Unix, `%USERPROFILE%\.local\bin\paperwall.cmd` on Windows)
-2. Writes the MCP config to the appropriate file for your client
-3. Adds Paperwall instructions to your client's global instructions file (Claude Code: `~/.claude/CLAUDE.md`, Codex: `~/.codex/AGENTS.md`, Gemini CLI / Antigravity: `~/.gemini/GEMINI.md`). This tells the AI assistant to prefer Paperwall's `fetch_url` tool over any built-in web fetch when accessing URLs.
-4. Walks you through wallet creation (machine-bound encryption, no password)
-5. Prompts for spending limits (per-request, daily, total)
-
-For clients with existing config files, the Unix installer merges the Paperwall entry using `jq` (JSON clients) or appends the TOML block (Codex). If `jq` is not installed and the config file already exists, it prints the snippet for manual copy-paste. The Windows installer uses PowerShell's native `ConvertFrom-Json`/`ConvertTo-Json` -- no external tools needed.
+For clients with existing config files, the wizard merges the Paperwall entry into the existing JSON config or appends the TOML block (Codex).
 
 **Re-running the installer is safe.** The installer is idempotent -- running it again updates your configuration rather than duplicating it. MCP configs are merged (existing entries are overwritten), and instruction files use `<!-- paperwall-start -->` / `<!-- paperwall-end -->` markers to replace the Paperwall section in place. This means future installs can update the instructions (e.g., when new networks or tokens are supported) without leaving stale content behind.
 

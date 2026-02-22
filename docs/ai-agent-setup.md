@@ -30,44 +30,17 @@ npm install -g @kobaru/paperwall
 
 **Full guided setup** (recommended -- walks you through wallet, budget, and AI client integration):
 
-**macOS / Linux:**
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.sh | bash
+paperwall setup
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/kobaru-io/paperwall/main/packages/agent/install-remote.ps1 | iex
-```
-
-**From source** (if you already cloned the repo):
-
-```bash
-git clone https://github.com/kobaru-io/paperwall.git
-cd paperwall
-npm install
-bash packages/agent/install.sh       # macOS / Linux
-# pwsh packages/agent/install.ps1    # Windows
-```
-
-The installer walks you through building the CLI, choosing your AI client and integration method (MCP or skill), setting up a wallet, and configuring a budget. The steps below describe the skill-based path.
+The setup wizard walks you through choosing your AI client and integration method (MCP or skill), setting up a wallet, and configuring a budget. The steps below describe the skill-based path.
 
 ---
 
-## What the installer does
+## What the setup wizard does
 
-### Step 1: Install the CLI
-
-If you used `npm install -g @kobaru/paperwall`, the CLI is already available. The guided installer (curl script) builds the `paperwall` binary from source and makes it available as a command:
-
-- **macOS / Linux:** Symlinks to `~/.local/bin/paperwall`. Because it's a symlink, the CLI stays in sync with the built source. Ensure `~/.local/bin` is on your PATH.
-- **Windows:** Creates a `paperwall.cmd` wrapper in `%USERPROFILE%\.local\bin\`. Add this directory to your PATH if it isn't already.
-
-No `sudo`, administrator privileges, or global npm permissions are needed.
-
-### Step 2: Choose your AI client
+### Step 1: Choose your AI client
 
 The installer shows a single list of all supported clients and integration methods.
 

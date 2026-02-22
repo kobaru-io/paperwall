@@ -450,6 +450,25 @@ export function buildProgram(): Command {
       },
     );
 
+  // ── Setup command ──────────────────────────────────────────────
+
+  program
+    .command('setup')
+    .description('Interactive setup wizard (AI client, wallet, budget)')
+    .option('--skip-wallet', 'Skip wallet setup')
+    .option('--skip-budget', 'Skip budget setup')
+    .option('--skip-ai', 'Skip AI client integration')
+    .option('-f, --force', 'Re-run setup even if already configured')
+    .action(async (options: { skipWallet?: boolean; skipBudget?: boolean; skipAi?: boolean; force?: boolean }) => {
+      try {
+        const { runSetup } = await import('./setup.js');
+        await runSetup(options);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        outputError('setup_failed', message, 1);
+      }
+    });
+
   // ── Demo command ───────────────────────────────────────────────
 
   program
