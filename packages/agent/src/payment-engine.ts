@@ -25,6 +25,20 @@ export interface FetchOptions {
   readonly maxPrice?: string;
   readonly network?: string;
   readonly timeout?: number;
+  readonly optimistic?: boolean;
+}
+
+// -- Pending Settlements ---
+
+const pendingSettlements: Promise<void>[] = [];
+
+/**
+ * Wait for all in-flight optimistic settlements to complete.
+ * Call before process exit to avoid losing background settlements.
+ */
+export async function flushPendingSettlements(): Promise<void> {
+  await Promise.allSettled(pendingSettlements);
+  pendingSettlements.length = 0;
 }
 
 interface PaymentInfo {
@@ -36,6 +50,7 @@ interface PaymentInfo {
   readonly txHash: string;
   readonly payTo: string;
   readonly payer: string;
+  readonly status?: 'pending' | 'confirmed' | 'failed';
 }
 
 interface FetchSuccess {
@@ -156,7 +171,7 @@ export async function fetchWithPayment(
     log(`Budget check: OK`);
 
     if (metaTag.mode === 'client') {
-      return await handleClientMode(url, response.status, contentType, html, metaTag, accept);
+      return await handleClientMode(url, response.status, contentType, html, metaTag, accept, options);
     }
 
     if (metaTag.mode === 'server') {
@@ -425,8 +440,9 @@ async function handleClientMode(
   statusCode: number,
   contentType: string,
   content: string,
-  metaTag: { facilitatorUrl: string; siteKey?: string },
+  metaTag: { facilitatorUrl: string; siteKey?: string; optimistic: boolean },
   accept: { network: string; amount: string; asset: string; payTo: string },
+  options: FetchOptions,
 ): Promise<FetchResult> {
   try {
     // Validate asset matches network
@@ -471,7 +487,64 @@ async function handleClientMode(
       accepts: [paymentRequirements],
     });
 
-    // Step 4e: POST /settle
+    // Check if optimistic delivery is enabled
+    const optimistic = options.optimistic !== false && metaTag.optimistic !== false;
+
+    if (optimistic) {
+      // Return content immediately with pending status, settle in background
+      const settlementPromise = settle(metaTag.facilitatorUrl, metaTag.siteKey ?? '', paymentPayload, paymentRequirements)
+        .then((settleResult) => {
+          log(`Payment settled, txHash: ${settleResult.txHash}`);
+          appendPayment({
+            ts: new Date().toISOString(),
+            url,
+            amount: accept.amount,
+            asset: accept.asset,
+            network: accept.network,
+            txHash: settleResult.txHash,
+            mode: 'client',
+            status: 'confirmed',
+            settledAt: new Date().toISOString(),
+          });
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log(`Settlement failed: ${msg}`);
+          appendPayment({
+            ts: new Date().toISOString(),
+            url,
+            amount: accept.amount,
+            asset: accept.asset,
+            network: accept.network,
+            txHash: '',
+            mode: 'client',
+            status: 'failed',
+            error: msg,
+          });
+        });
+      pendingSettlements.push(settlementPromise);
+
+      return {
+        ok: true,
+        url,
+        statusCode,
+        contentType,
+        content,
+        payment: {
+          mode: 'client',
+          amount: accept.amount,
+          amountFormatted: smallestToUsdc(accept.amount),
+          asset: accept.asset,
+          network: accept.network,
+          txHash: '',
+          payTo: accept.payTo,
+          payer: account.address,
+          status: 'pending',
+        },
+      };
+    }
+
+    // Step 4e: POST /settle (non-optimistic: wait for settlement)
     const settleResult = await settle(
       metaTag.facilitatorUrl,
       metaTag.siteKey ?? '',

@@ -11,6 +11,9 @@ export interface HistoryEntry {
   readonly network: string;
   readonly txHash: string;
   readonly mode: 'client' | 'server' | '402';
+  readonly status?: 'pending' | 'confirmed' | 'failed';
+  readonly settledAt?: string;
+  readonly error?: string;
 }
 
 /**

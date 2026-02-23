@@ -116,7 +116,7 @@ The SDK is a zero-dependency library that publishers add to their pages with a s
 
 When the IIFE bundle loads via a `<script>` tag, the entry point (`index.ts`) checks for `document.currentScript` and calls `autoInit()`. This reads `data-*` attributes from the script element and kicks off the full initialization:
 
-1. **Parse config** -- `parseScriptTag()` reads `data-pay-to`, `data-price`, `data-network`, `data-facilitator-url`, `data-mode`, `data-asset`, `data-payment-url`, and `data-site-key` from the script element. `parseConfig()` validates all fields: URL format, Ethereum address format (0x + 40 hex chars), CAIP-2 network format, and positive integer amounts.
+1. **Parse config** -- `parseScriptTag()` reads `data-pay-to`, `data-price`, `data-network`, `data-facilitator-url`, `data-mode`, `data-asset`, `data-payment-url`, `data-site-key`, and `data-optimistic` from the script element. `parseConfig()` validates all fields: URL format, Ethereum address format (0x + 40 hex chars), CAIP-2 network format, and positive integer amounts.
 2. **Emit signal** -- `emitSignal()` creates a `<meta name="x402-payment-required">` tag in `<head>` with a base64-encoded JSON payload. The meta tag also carries `data-facilitator-url`, `data-mode`, and `data-site-key` attributes.
 3. **Start messaging** -- `initMessaging()` posts a `PAPERWALL_PAYMENT_REQUIRED` message via `window.postMessage` and registers a listener for `PAPERWALL_PAYMENT_RESULT` responses.
 4. **Show badge** -- `showBadge()` inserts a fixed-position visual indicator in the bottom-right corner of the page.
@@ -148,6 +148,7 @@ The meta tag also carries data attributes:
 - `data-facilitator-url` -- facilitator service URL
 - `data-mode` -- `"client"` or `"server"`
 - `data-site-key` -- optional authentication key
+- `data-optimistic` -- `"true"` (default) or `"false"`, controls optimistic settlement
 
 ### Extension detection
 
@@ -174,14 +175,14 @@ The extension is structured as three isolated execution contexts with distinct s
 The content script runs in every page (`"matches": ["<all_urls>"]`) at `document_idle`. It bridges the gap between the page's SDK and the extension's service worker.
 
 **Detector** (`detector.ts`):
-- `scanForPaperwall()` queries the DOM for `meta[name="x402-payment-required"]` and parses the base64 content plus data attributes into a `DetectedPage` object.
+- `scanForPaperwall()` queries the DOM for `meta[name="x402-payment-required"]` and parses the base64 content plus data attributes (including `data-optimistic`) into a `DetectedPage` object.
 - `observeForPaperwall()` watches `<head>` via `MutationObserver` for dynamically added meta tags. This handles single-page apps that add payment signals after initial load.
 
 **Bridge** (`bridge.ts`):
 - Listens for `window.postMessage` events with the `PAPERWALL_` prefix.
 - Validates `event.origin === window.location.origin` -- rejects cross-origin messages, null origins, empty origins, and `about:` origins (sandboxed iframes).
 - Translates `PAPERWALL_PAYMENT_REQUIRED` into `PAGE_HAS_PAPERWALL` and sends it to the service worker via `chrome.runtime.sendMessage`.
-- Listens for `PAYMENT_COMPLETE` messages from the service worker (via `chrome.runtime.onMessage`) and relays them back to the page as `PAPERWALL_PAYMENT_RESULT`.
+- Listens for `PAYMENT_COMPLETE`, `PAYMENT_OPTIMISTIC`, `PAYMENT_CONFIRMED`, and `PAYMENT_SETTLE_FAILED` messages from the service worker (via `chrome.runtime.onMessage`) and relays them back to the page as `PAPERWALL_PAYMENT_RESULT` (with appropriate `status` field).
 - Handles `PAPERWALL_PING` directly by responding with `PAPERWALL_PONG` -- no service worker involved.
 
 ### Service worker (`src/background/`)
@@ -206,6 +207,8 @@ Routes all extension message types to their handlers:
 | `GET_PAGE_STATE` | Popup | `handleGetPageState` | No |
 | `SIGN_AND_PAY` | Popup | `handleSignAndPay` | Yes |
 
+When `optimistic` is `true` (default for Tier 1 & 2), the `SIGN_AND_PAY` handler returns an optimistic response immediately after signing and dispatching settlement to the background. The page receives content access before on-chain confirmation. Background settlement then sends `PAYMENT_CONFIRMED` or `PAYMENT_SETTLE_FAILED` via the content script bridge.
+
 Sensitive operations verify that the sender URL starts with `chrome-extension://{extensionId}/`. Content scripts and web pages cannot invoke wallet creation, unlock, payment, balance, or history operations.
 
 **Key manager** (`key-manager.ts`):
@@ -221,7 +224,7 @@ Delegates EIP-712 signing to the `@x402/evm` library (`ExactEvmScheme` via `x402
 - `nonce` = random 32-byte hex (prevents replay)
 - Domain info (name, version, chainId, verifyingContract) comes from the facilitator's `GET /supported` response `extra` field
 
-> **Note:** `signer.ts` still exists as a standalone module with the raw EIP-712 signing logic, but the main payment flow uses the x402 library via `payment-client.ts` to ensure wire-format compatibility with the facilitator.
+> **Note:** The main payment flow uses the x402 library via `payment-client.ts` to ensure wire-format compatibility with the facilitator.
 
 **Facilitator client** (`facilitator.ts`):
 - `getSupported(url, siteKey)` -- `GET /supported`, returns EIP-712 domain info
@@ -238,6 +241,8 @@ Delegates EIP-712 signing to the `@x402/evm` library (`ExactEvmScheme` via `x402
 **History** (`history.ts`):
 - Stores `PaymentRecord` objects in `chrome.storage.local`.
 - Most-recent-first ordering, capped at 1,000 records (oldest dropped).
+- Records include `status` (`"pending"` | `"confirmed"` | `"failed"`), `settledAt`, and `error` fields to track optimistic payment lifecycle.
+- `updatePaymentStatus()` updates a record's status after background settlement completes.
 
 ### Popup UI (`src/popup/`)
 
@@ -517,6 +522,44 @@ sequenceDiagram
     SDK->>SDK: 20. onPaymentSuccess<br/>callback fires
 ```
 
+### Optimistic settlement (Tier 1 & 2 only)
+
+When `data-optimistic="true"` (default), the extension delivers content access **before** on-chain settlement confirms. This dramatically improves perceived speed for micropayments.
+
+```mermaid
+sequenceDiagram
+    participant SDK as SDK (page)
+    participant CS as Content Script
+    participant SW as Service Worker
+    participant Fac as Facilitator
+
+    Note over SW: Steps 1-12 same as standard flow
+
+    SW->>SW: 12. Sign EIP-712 payload
+    SW->>CS: 13. tabs.sendMessage<br/>PAYMENT_OPTIMISTIC
+    CS->>SDK: 14. postMessage<br/>PAPERWALL_PAYMENT_RESULT<br/>(status: "optimistic")
+    SDK->>SDK: 15. onOptimisticAccess callback<br/>Content unlocked immediately
+
+    Note over SW,Fac: Background settlement continues...
+
+    SW->>Fac: 16. POST /settle
+    Fac->>Fac: On-chain settlement
+
+    alt Settlement succeeds
+        SW->>SW: 17a. updatePaymentStatus("confirmed")
+        SW->>CS: 18a. PAYMENT_CONFIRMED
+        CS->>SDK: 19a. PAPERWALL_PAYMENT_RESULT<br/>(status: "confirmed")
+        SDK->>SDK: onPaymentSuccess callback
+    else Settlement fails
+        SW->>SW: 17b. updatePaymentStatus("failed")
+        SW->>CS: 18b. PAYMENT_SETTLE_FAILED
+        CS->>SDK: 19b. PAPERWALL_PAYMENT_RESULT<br/>(status: "settle_failed")
+        SDK->>SDK: onPaymentError callback
+    end
+```
+
+When `data-optimistic="false"`, the standard sequential flow is used (sign → settle → respond). This is always the case for Tier 3 (server mode), where the publisher controls the flow.
+
 ### Error paths
 
 | Step | Failure | Result |
@@ -742,6 +785,7 @@ Response (x402 `SettleResponse`):
 | Payment history | `chrome.storage.local` | Persistent, max 1000 records |
 | Active page state | In-memory `Map<tabId, state>` | Service worker only, cleared on restart |
 | Payment-in-progress lock | In-memory `Set<tabId>` | Service worker only, prevents concurrent payments |
+| Pending optimistic payments | `chrome.storage.session` | Service worker only, recovered on SW restart via `recoverPendingPayments()` |
 | Unlock attempt counter | In-memory variables | Service worker only, reset on restart |
 | Balance cache | In-memory `Map` | Service worker only, 30-second TTL |
 

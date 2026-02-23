@@ -31,7 +31,7 @@ export function initBridge(): void {
     if (!message || typeof message !== 'object') return;
     const msg = message as Record<string, unknown>;
 
-    // Relay PAYMENT_COMPLETE messages to the SDK
+    // Relay PAYMENT_COMPLETE messages to the SDK (backward compat, non-optimistic flow)
     if (msg.type === 'PAYMENT_COMPLETE') {
       window.postMessage(
         {
@@ -39,6 +39,47 @@ export function initBridge(): void {
           requestId: msg.requestId,
           success: msg.success,
           receipt: msg.receipt,
+          error: msg.error,
+        },
+        window.location.origin,
+      );
+    }
+
+    // Relay PAYMENT_OPTIMISTIC (optimistic flow — content can be shown)
+    if (msg.type === 'PAYMENT_OPTIMISTIC') {
+      window.postMessage(
+        {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: msg.requestId,
+          success: true,
+          optimistic: true,
+          receipt: { amount: msg.amount, url: msg.url },
+        },
+        window.location.origin,
+      );
+    }
+
+    // Relay PAYMENT_CONFIRMED (settlement confirmed)
+    if (msg.type === 'PAYMENT_CONFIRMED') {
+      window.postMessage(
+        {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: msg.requestId,
+          success: true,
+          confirmed: true,
+          receipt: msg.receipt,
+        },
+        window.location.origin,
+      );
+    }
+
+    // Relay PAYMENT_SETTLE_FAILED (settlement failed after optimistic)
+    if (msg.type === 'PAYMENT_SETTLE_FAILED') {
+      window.postMessage(
+        {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: msg.requestId,
+          success: false,
           error: msg.error,
         },
         window.location.origin,

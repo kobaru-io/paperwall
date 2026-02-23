@@ -70,7 +70,10 @@ async function showMainOrPayment(
           network: pageState.network as string,
           facilitatorUrl: pageState.facilitatorUrl as string,
         },
-        () => renderMainShell(app, address, 'dashboard'),
+        () => {
+          clearHistoryCache();
+          renderMainShell(app, address, 'dashboard');
+        },
       );
     } else {
       await renderMainShell(app, address, initialTab);

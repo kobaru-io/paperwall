@@ -101,7 +101,7 @@ describe('fetchWithPayment', () => {
       }),
     );
 
-    const result = await fetchWithPayment('https://example.com/free', {});
+    const result = await fetchWithPayment('https://example.com/free', { optimistic: false });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected ok');
@@ -146,7 +146,7 @@ describe('fetchWithPayment', () => {
       JSON.stringify({ perRequestMax: '1.00', dailyMax: '5.00', totalMax: '50.00' }),
     );
 
-    const result = await fetchWithPayment('https://example.com/premium', {});
+    const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected ok');
@@ -196,7 +196,7 @@ describe('fetchWithPayment', () => {
       JSON.stringify({ perRequestMax: '0.001' }), // 0.001 USDC = 1000 smallest, request wants 10000
     );
 
-    const result = await fetchWithPayment('https://example.com/premium', {});
+    const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
@@ -219,7 +219,7 @@ describe('fetchWithPayment', () => {
       JSON.stringify({ perRequestMax: '10.00', dailyMax: '100.00' }),
     );
 
-    const result = await fetchWithPayment('https://example.com/premium', { maxPrice: '0.005' });
+    const result = await fetchWithPayment('https://example.com/premium', { maxPrice: '0.005', optimistic: false });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
@@ -234,7 +234,7 @@ describe('fetchWithPayment', () => {
       }),
     );
 
-    const result = await fetchWithPayment('https://example.com/premium', {});
+    const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
@@ -263,7 +263,7 @@ describe('fetchWithPayment', () => {
       );
     globalThis.fetch = fetchSpy;
 
-    const result = await fetchWithPayment('https://example.com/premium', { maxPrice: '0.05' });
+    const result = await fetchWithPayment('https://example.com/premium', { maxPrice: '0.05', optimistic: false });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected ok');
@@ -299,7 +299,7 @@ describe('fetchWithPayment', () => {
       JSON.stringify({ dailyMax: '5.00' }),
     );
 
-    await fetchWithPayment('https://example.com/premium', {});
+    await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
     // Check that history.jsonl was written
     const historyPath = path.join(budgetDir, 'history.jsonl');
@@ -320,7 +320,7 @@ describe('fetchWithPayment', () => {
   it('should return error when initial fetch fails', async () => {
     globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('ECONNREFUSED'));
 
-    const result = await fetchWithPayment('https://example.com/down', {});
+    const result = await fetchWithPayment('https://example.com/down', { optimistic: false });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
@@ -357,7 +357,7 @@ describe('fetchWithPayment', () => {
       JSON.stringify({ dailyMax: '5.00' }),
     );
 
-    const result = await fetchWithPayment('https://example.com/premium', {});
+    const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
@@ -373,7 +373,7 @@ describe('fetchWithPayment', () => {
         }),
     );
 
-    const result = await fetchWithPayment('https://example.com/slow', { timeout: 50 });
+    const result = await fetchWithPayment('https://example.com/slow', { timeout: 50, optimistic: false });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected not ok');
@@ -410,7 +410,7 @@ describe('fetchWithPayment', () => {
       JSON.stringify({ dailyMax: '5.00' }),
     );
 
-    const result = await fetchWithPayment('https://example.com/premium', {});
+    const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected ok');
@@ -489,7 +489,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ perRequestMax: '1.00', dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://nature.com/article/123', {});
+      const result = await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('Expected ok');
@@ -542,7 +542,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://nature.com/article/123', {});
+      const result = await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
 
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error('Expected not ok');
@@ -578,7 +578,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://nature.com/article/123', {});
+      const result = await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
 
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error('Expected not ok');
@@ -614,7 +614,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      await fetchWithPayment('https://nature.com/article/123', {});
+      await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
 
       const historyPath = path.join(budgetDir, 'history.jsonl');
       expect(fs.existsSync(historyPath)).toBe(true);
@@ -636,7 +636,7 @@ describe('fetchWithPayment', () => {
       );
 
       // No budget set -> requires --max-price
-      const result = await fetchWithPayment('https://nature.com/article/123', {});
+      const result = await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
 
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error('Expected not ok');
@@ -674,7 +674,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://nature.com/article/123', {});
+      const result = await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
 
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error('Expected not ok');
@@ -760,7 +760,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ perRequestMax: '1.00', dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://api.example.com/paid-data', {});
+      const result = await fetchWithPayment('https://api.example.com/paid-data', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error(`Expected ok, got: ${result.error}: ${result.message}`);
@@ -784,7 +784,7 @@ describe('fetchWithPayment', () => {
       globalThis.fetch = fetchSpy;
 
       // No budget set, no --max-price => should decline
-      const result = await fetchWithPayment('https://api.example.com/paid-data', {});
+      const result = await fetchWithPayment('https://api.example.com/paid-data', { optimistic: false });
 
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error('Expected not ok');
@@ -835,7 +835,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://api.example.com/paid-data', {});
+      const result = await fetchWithPayment('https://api.example.com/paid-data', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error(`Expected ok, got: ${result.error}: ${result.message}`);
@@ -879,7 +879,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      await fetchWithPayment('https://api.example.com/paid-data', {});
+      await fetchWithPayment('https://api.example.com/paid-data', { optimistic: false });
 
       const historyPath = path.join(budgetDir, 'history.jsonl');
       expect(fs.existsSync(historyPath)).toBe(true);
@@ -906,7 +906,7 @@ describe('fetchWithPayment', () => {
         }),
       );
 
-      const result = await fetchWithPayment('https://example.com/free', {});
+      const result = await fetchWithPayment('https://example.com/free', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('Expected ok');
@@ -953,7 +953,7 @@ describe('fetchWithPayment', () => {
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://example.com/premium', {});
+      const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('Expected ok');
@@ -1004,7 +1004,7 @@ Paperwall.init({
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://example.com/premium', {});
+      const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('Expected ok');
@@ -1051,7 +1051,7 @@ Paperwall.init({
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://example.com/premium', {});
+      const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('Expected ok');
@@ -1092,7 +1092,7 @@ Paperwall.init({
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://example.com/premium', {});
+      const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('Expected ok');
@@ -1179,7 +1179,7 @@ Paperwall.init({
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://example.com/premium', {});
+      const result = await fetchWithPayment('https://example.com/premium', { optimistic: false });
       validateSuccessShape(result as unknown as Record<string, unknown>, 'client');
     });
 
@@ -1237,7 +1237,7 @@ Paperwall.init({
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://nature.com/article/123', {});
+      const result = await fetchWithPayment('https://nature.com/article/123', { optimistic: false });
       validateSuccessShape(result as unknown as Record<string, unknown>, 'server');
     });
 
@@ -1295,7 +1295,7 @@ Paperwall.init({
         JSON.stringify({ dailyMax: '5.00' }),
       );
 
-      const result = await fetchWithPayment('https://api.example.com/paid-data', {});
+      const result = await fetchWithPayment('https://api.example.com/paid-data', { optimistic: false });
       validateSuccessShape(result as unknown as Record<string, unknown>, '402');
     });
 

@@ -21,6 +21,7 @@ export interface MetaTagPayload {
   readonly siteKey?: string;
   readonly paymentUrl?: string;
   readonly accepts: readonly AcceptedPayment[];
+  readonly optimistic: boolean;
 }
 
 /**
@@ -144,6 +145,10 @@ export function parseMetaTag(html: string): MetaTagPayload | null {
     return null;
   }
 
+  // Extract data-optimistic attribute from the full meta tag
+  const optimisticMatch = /<meta[^>]*data-optimistic=["']([^"']+)["'][^>]*>/i.exec(html);
+  const optimistic = optimisticMatch?.[1] !== 'false';
+
   return {
     x402Version: 2,
     mode,
@@ -151,6 +156,7 @@ export function parseMetaTag(html: string): MetaTagPayload | null {
     ...(typeof siteKey === 'string' && siteKey.length > 0 ? { siteKey } : {}),
     ...(typeof paymentUrl === 'string' ? { paymentUrl } : {}),
     accepts: validatedAccepts,
+    optimistic,
   };
 }
 
@@ -205,6 +211,7 @@ export function parseScriptTag(html: string): MetaTagPayload | null {
       asset: extractDataAttr(tag, 'asset'),
       paymentUrl: extractDataAttr(tag, 'payment-url'),
       siteKey: extractDataAttr(tag, 'site-key'),
+      optimistic: extractDataAttr(tag, 'optimistic'),
     });
 
     if (result) return result;
@@ -249,6 +256,7 @@ export function parseInitCall(html: string): MetaTagPayload | null {
         asset: extractStringProp(window, 'asset'),
         paymentUrl: extractStringProp(window, 'paymentUrl'),
         siteKey: extractStringProp(window, 'siteKey'),
+        optimistic: extractStringProp(window, 'optimistic'),
       });
 
       if (result) return result;
@@ -279,6 +287,7 @@ interface RawPaymentConfig {
   readonly asset?: string;
   readonly paymentUrl?: string;
   readonly siteKey?: string;
+  readonly optimistic?: string;
 }
 
 /**
@@ -335,6 +344,7 @@ function buildPayload(config: RawPaymentConfig): MetaTagPayload | null {
         payTo: config.payTo,
       },
     ],
+    optimistic: config.optimistic !== 'false',
   };
 }
 

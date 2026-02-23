@@ -10,9 +10,10 @@ import {
   settle,
   type SupportedResponse,
   type PaymentRequirements,
+  type PaymentPayload,
 } from './facilitator.js';
 import { initializePaymentClient, createSignedPayload } from './payment-client.js';
-import { addPayment, getHistory } from './history.js';
+import { addPayment, getHistory, updatePaymentStatus } from './history.js';
 import { formatUsdcFromString } from '../shared/format.js';
 import { getExpectedAsset } from '../shared/constants.js';
 
@@ -46,6 +47,7 @@ interface ActivePageState {
       extra?: Record<string, unknown>;
     }>;
   };
+  optimistic: boolean;
 }
 
 type MessageResponse = Record<string, unknown>;
@@ -208,15 +210,35 @@ async function handlePageHasPaperwall(
     return { success: false, error: 'No tab ID' };
   }
 
+  // Validate required fields from content script message
+  const origin = message['origin'];
+  const url = message['url'];
+  const facilitatorUrl = message['facilitatorUrl'];
+  const price = message['price'];
+  const network = message['network'];
+  const signal = message['signal'] as ActivePageState['signal'] | undefined;
+
+  if (
+    typeof origin !== 'string' ||
+    typeof url !== 'string' ||
+    typeof facilitatorUrl !== 'string' ||
+    typeof price !== 'string' ||
+    typeof network !== 'string' ||
+    !signal
+  ) {
+    return { success: false, error: 'Missing required fields' };
+  }
+
   const state: ActivePageState = {
-    origin: message['origin'] as string,
-    url: message['url'] as string,
-    facilitatorUrl: message['facilitatorUrl'] as string,
-    price: message['price'] as string,
-    network: message['network'] as string,
+    origin,
+    url,
+    facilitatorUrl,
+    price,
+    network,
     mode: (message['mode'] as string) ?? 'client',
     siteKey: message['siteKey'] as string | undefined,
-    signal: message['signal'] as ActivePageState['signal'],
+    signal,
+    optimistic: (message['optimistic'] as string) !== 'false',
   };
 
   activePages.set(tabId, state);
@@ -296,13 +318,17 @@ async function handleSignAndPay(
   const tabId = (message['tabId'] as number | undefined) ?? 0;
 
   // Prevent concurrent payments for the same tab
+  // Must add to set immediately (before any await) to prevent race conditions
   if (paymentsInProgress.has(tabId)) {
     return { success: false, error: 'Payment already in progress for this tab' };
   }
+  paymentsInProgress.add(tabId);
+  let optimisticReturned = false;
 
   const pageState = activePages.get(tabId);
 
   if (!pageState) {
+    paymentsInProgress.delete(tabId);
     return { success: false, error: 'No Paperwall page detected for this tab' };
   }
 
@@ -311,6 +337,7 @@ async function handleSignAndPay(
   const privateKey = sessionData['privateKey'] as string | undefined;
 
   if (!privateKey) {
+    paymentsInProgress.delete(tabId);
     return { success: false, error: 'Wallet is locked' };
   }
 
@@ -318,10 +345,9 @@ async function handleSignAndPay(
   const wallet = localData['wallet'] as WalletData | undefined;
 
   if (!wallet) {
+    paymentsInProgress.delete(tabId);
     return { success: false, error: 'No wallet found' };
   }
-
-  paymentsInProgress.add(tabId);
 
   try {
     // 2. Pre-flight balance check
@@ -333,12 +359,11 @@ async function handleSignAndPay(
       setBadgeError(tabId);
       return {
         success: false,
-        error: `Insufficient balance: have ${balance.formatted}, need ${formatAmount(pageState.price)}`,
+        error: `Insufficient balance: have ${balance.formatted}, need ${formatUsdcFromString(pageState.price)}`,
       };
     }
 
     // 3. Get payment offer from signal
-    // FIX CRITICAL-2: Add null check for pageState.signal
     if (!pageState.signal || !pageState.signal.accepts || pageState.signal.accepts.length === 0) {
       setBadgeError(tabId);
       return { success: false, error: 'No payment signal found' };
@@ -347,6 +372,7 @@ async function handleSignAndPay(
     const offer = pageState.signal.accepts[0];
 
     // 4. Get /supported from facilitator and find matching network
+
     const supported: SupportedResponse = await getSupported(
       pageState.facilitatorUrl,
       pageState.siteKey,
@@ -371,7 +397,7 @@ async function handleSignAndPay(
       return { success: false, error: `Unsupported asset ${offer.asset} for network ${offer.network}` };
     }
 
-    // 4. Initialize x402 payment client and create signed payload
+    // 5. Initialize x402 payment client and create signed payload
     initializePaymentClient(privateKey, offer.network);
 
     const paymentRequirements: PaymentRequirements = {
@@ -387,26 +413,94 @@ async function handleSignAndPay(
       },
     };
 
-    // 5. Create signed payment payload via x402 library (EIP-3009)
+    // 6. Create signed payment payload via x402 library (EIP-3009)
     const paymentPayload = await createSignedPayload(
       { url: pageState.url, description: '', mimeType: '' },
       paymentRequirements,
     );
 
-    // 7. Verify before settling
-    const verifyResult = await verify(
-      pageState.facilitatorUrl,
-      pageState.siteKey,
-      paymentPayload,
-      paymentRequirements,
-    );
+    // 7. Verify before settling (unless skip-verify setting is enabled)
+    const settingsData = await chrome.storage.local.get('settings');
+    const settings = (settingsData['settings'] as Record<string, unknown> | undefined) ?? {};
+    const skipVerify = settings['skipVerify'] === true;
 
-    if (!verifyResult.isValid) {
-      setBadgeError(tabId);
-      return { success: false, error: `Payment verification failed: ${verifyResult.invalidReason ?? 'unknown'}` };
+    if (!skipVerify) {
+      const verifyResult = await verify(
+        pageState.facilitatorUrl,
+        pageState.siteKey,
+        paymentPayload,
+        paymentRequirements,
+      );
+
+      if (!verifyResult.isValid) {
+        setBadgeError(tabId);
+        return { success: false, error: `Payment verification failed: ${verifyResult.invalidReason ?? 'unknown'}` };
+      }
     }
 
-    // 8. Settle via facilitator (after verify passed)
+    const requestId = (message['requestId'] as string) ?? crypto.randomUUID();
+
+    if (pageState.optimistic) {
+      // -- Optimistic flow: notify immediately, settle in background --
+
+      // 8a. Send PAYMENT_OPTIMISTIC to content script
+      try {
+        await chrome.tabs.sendMessage(tabId, {
+          type: 'PAYMENT_OPTIMISTIC',
+          requestId,
+          amount: offer.amount,
+          url: pageState.url,
+        });
+      } catch { /* tab may be closed */ }
+
+      // 8b. Set badge to pending
+      chrome.action.setBadgeText({ tabId, text: '⏳' });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.detected });
+
+      // 8c. Write pending history record
+      await addPayment({
+        requestId,
+        origin: pageState.origin,
+        url: pageState.url,
+        amount: offer.amount,
+        formattedAmount: formatUsdcFromString(offer.amount),
+        network: offer.network,
+        asset: offer.asset,
+        from: wallet.address,
+        to: offer.payTo,
+        txHash: '',
+        status: 'pending',
+        timestamp: Date.now(),
+      });
+
+      // 8d. Persist in-flight state for SW restart recovery
+      const sessionData2 = await chrome.storage.session.get('pendingPayments');
+      const pending = (sessionData2['pendingPayments'] as Record<string, unknown> | undefined) ?? {};
+      pending[requestId] = {
+        requestId,
+        tabId,
+        url: pageState.url,
+        facilitatorUrl: pageState.facilitatorUrl,
+        siteKey: pageState.siteKey,
+        signedAt: Date.now(),
+      };
+      await chrome.storage.session.set({ pendingPayments: pending });
+
+      // 8e. Settle in background (don't await before returning)
+      // settleInBackground handles paymentsInProgress cleanup in its finally block
+      optimisticReturned = true;
+      settleInBackground(
+        tabId, requestId, wallet.address, offer,
+        pageState.facilitatorUrl, pageState.siteKey,
+        paymentPayload, paymentRequirements,
+      );
+
+      return { success: true, optimistic: true, requestId };
+    }
+
+    // -- Non-optimistic flow (existing behavior) --
+
+    // 8. Settle via facilitator
     const settleResult = await settle(
       pageState.facilitatorUrl,
       pageState.siteKey,
@@ -414,13 +508,13 @@ async function handleSignAndPay(
       paymentRequirements,
     );
 
-    // 9. Save PaymentRecord
+    // 9. Save payment record
     await addPayment({
-      requestId: crypto.randomUUID(),
+      requestId,
       origin: pageState.origin,
       url: pageState.url,
       amount: offer.amount,
-      formattedAmount: formatAmount(offer.amount),
+      formattedAmount: formatUsdcFromString(offer.amount),
       network: offer.network,
       asset: offer.asset,
       from: wallet.address,
@@ -430,7 +524,7 @@ async function handleSignAndPay(
       timestamp: Date.now(),
     });
 
-    // 10. Update badge to green (success)
+    // 10. Update badge to green
     chrome.action.setBadgeText({ tabId, text: '\u2713' });
     chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.success });
 
@@ -449,11 +543,11 @@ async function handleSignAndPay(
       },
     };
 
-    // FIX CRITICAL-1: Send payment result to content script
+    // Send payment result to content script
     try {
       await chrome.tabs.sendMessage(tabId, {
         type: 'PAYMENT_COMPLETE',
-        requestId: message['requestId'] as string,
+        requestId,
         success: true,
         receipt: result.receipt,
       });
@@ -469,7 +563,7 @@ async function handleSignAndPay(
 
     setBadgeError(tabId);
 
-    // FIX CRITICAL-1: Send error to content script
+    // Send error to content script
     try {
       await chrome.tabs.sendMessage(tabId, {
         type: 'PAYMENT_COMPLETE',
@@ -484,8 +578,113 @@ async function handleSignAndPay(
 
     return { success: false, error: errorMessage };
   } finally {
+    // Don't clear guard if optimistic path returned — settleInBackground handles cleanup
+    if (!optimisticReturned) {
+      paymentsInProgress.delete(tabId);
+    }
+  }
+}
+
+// ── Background Settlement ───────────────────────────────────────────
+
+async function settleInBackground(
+  tabId: number,
+  requestId: string,
+  walletAddress: string,
+  offer: { amount: string; network: string; asset: string; payTo: string },
+  facilitatorUrl: string,
+  siteKey: string | undefined,
+  paymentPayload: PaymentPayload,
+  paymentRequirements: PaymentRequirements,
+): Promise<void> {
+  try {
+    const settleResult = await settle(facilitatorUrl, siteKey, paymentPayload, paymentRequirements);
+
+    // Update history to confirmed
+    await updatePaymentStatus(requestId, 'confirmed', {
+      txHash: settleResult.transaction,
+      settledAt: Date.now(),
+    });
+
+    // Notify content script
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'PAYMENT_CONFIRMED',
+        requestId,
+        success: true,
+        receipt: {
+          txHash: settleResult.transaction,
+          network: settleResult.network,
+          amount: offer.amount,
+          from: walletAddress,
+          to: offer.payTo,
+          payer: settleResult.payer,
+        },
+      });
+    } catch { /* tab may be closed */ }
+
+    // Badge: success
+    chrome.action.setBadgeText({ tabId, text: '\u2713' });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.success });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Settlement failed';
+
+    // Update history to failed
+    await updatePaymentStatus(requestId, 'failed', { error: errorMessage });
+
+    // Notify content script
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'PAYMENT_SETTLE_FAILED',
+        requestId,
+        success: false,
+        error: errorMessage,
+      });
+    } catch { /* tab may be closed */ }
+
+    // Badge: error
+    setBadgeError(tabId);
+  } finally {
+    // Clear in-flight state
+    const sessionData = await chrome.storage.session.get('pendingPayments');
+    const pending = (sessionData['pendingPayments'] as Record<string, unknown> | undefined) ?? {};
+    delete pending[requestId];
+    await chrome.storage.session.set({ pendingPayments: pending });
+
     paymentsInProgress.delete(tabId);
   }
+}
+
+// ── SW Restart Recovery ─────────────────────────────────────────────
+
+const PENDING_TIMEOUT_MS = 60_000;
+
+export async function recoverPendingPayments(): Promise<void> {
+  const sessionData = await chrome.storage.session.get('pendingPayments');
+  const pending = (sessionData['pendingPayments'] as Record<string, Record<string, unknown>> | undefined) ?? {};
+
+  const now = Date.now();
+
+  for (const [requestId, payment] of Object.entries(pending)) {
+    const signedAt = (payment['signedAt'] as number) ?? 0;
+    const tabId = (payment['tabId'] as number) ?? 0;
+
+    const errorMsg = now - signedAt > PENDING_TIMEOUT_MS
+      ? 'Settlement timeout (service worker restarted)'
+      : 'Settlement interrupted (service worker restarted)';
+
+    await updatePaymentStatus(requestId, 'failed', { error: errorMsg });
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'PAYMENT_SETTLE_FAILED',
+        requestId,
+        success: false,
+        error: errorMsg,
+      });
+    } catch { /* tab may be closed */ }
+  }
+
+  await chrome.storage.session.set({ pendingPayments: {} });
 }
 
 // ── History Handler ─────────────────────────────────────────────────
@@ -514,9 +713,14 @@ function setBadgeError(tabId: number): void {
 }
 
 // Formatting functions moved to shared/format.ts
-const formatAmount = formatUsdcFromString;
 
 async function handleExportPrivateKey(password: string): Promise<MessageResponse> {
+  // Share brute-force lockout with unlock handler
+  if (Date.now() < lockedUntil) {
+    const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+    return { success: false, error: `Too many attempts. Try again in ${remaining}s` };
+  }
+
   const data = await chrome.storage.local.get('wallet');
   const wallet = data['wallet'] as WalletData | undefined;
 
@@ -531,9 +735,18 @@ async function handleExportPrivateKey(password: string): Promise<MessageResponse
       wallet.keySalt,
       wallet.keyIv,
     );
+    unlockAttempts = 0;
+    lockedUntil = 0;
     return { success: true, privateKey };
   } catch {
-    return { success: false, error: 'Wrong password' };
+    unlockAttempts++;
+    if (unlockAttempts >= MAX_UNLOCK_ATTEMPTS) {
+      lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+      unlockAttempts = 0;
+      return { success: false, error: 'Too many incorrect attempts. Wallet locked for 5 minutes.' };
+    }
+    const attemptsLeft = MAX_UNLOCK_ATTEMPTS - unlockAttempts;
+    return { success: false, error: `Wrong password. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.` };
   }
 }
 
@@ -670,4 +883,7 @@ export function registerMessageRouter(): void {
   chrome.tabs.onRemoved.addListener((tabId: number) => {
     activePages.delete(tabId);
   });
+
+  // Recover any pending optimistic payments from previous SW lifecycle
+  recoverPendingPayments().catch(console.warn);
 }

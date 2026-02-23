@@ -210,6 +210,75 @@ describe('message-router', () => {
     });
   });
 
+  describe('UNLOCK_WALLET brute-force lockout', () => {
+    async function resetLockoutState(): Promise<void> {
+      // Advance time past any active lockout period
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(6 * 60 * 1000); // 6 minutes
+      vi.useRealTimers();
+
+      // Reset module-level unlockAttempts by doing a successful unlock
+      await sendMessage({ type: 'CREATE_WALLET', password: 'reset-pw' });
+      sessionStorageMock._reset();
+      await sendMessage({ type: 'UNLOCK_WALLET', password: 'reset-pw' });
+      // Now unlockAttempts = 0, lockedUntil = 0
+      localStorageMock._reset();
+      sessionStorageMock._reset();
+    }
+
+    it('shows decreasing attempts remaining', async () => {
+      await resetLockoutState();
+      await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      sessionStorageMock._reset();
+
+      const r1 = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+      expect(r1.error).toContain('4 attempts remaining');
+
+      const r2 = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+      expect(r2.error).toContain('3 attempts remaining');
+
+      const r3 = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+      expect(r3.error).toContain('2 attempts remaining');
+
+      const r4 = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+      expect(r4.error).toContain('1 attempt remaining');
+    });
+
+    it('locks wallet after 5 consecutive wrong password attempts', async () => {
+      await resetLockoutState();
+      await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      sessionStorageMock._reset();
+
+      // 4 wrong attempts — should get "N attempts remaining"
+      for (let i = 0; i < 4; i++) {
+        const r = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+        expect(r.success).toBe(false);
+        expect(r.error).toContain('remaining');
+      }
+
+      // 5th wrong attempt triggers lockout
+      const lockResponse = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+      expect(lockResponse.success).toBe(false);
+      expect(lockResponse.error).toContain('locked for 5 minutes');
+    });
+
+    it('rejects correct password during lockout period', async () => {
+      await resetLockoutState();
+      await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      sessionStorageMock._reset();
+
+      // Trigger lockout
+      for (let i = 0; i < 5; i++) {
+        await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
+      }
+
+      // Correct password should still be rejected during lockout
+      const response = await sendMessage({ type: 'UNLOCK_WALLET', password: 'correct-pw' });
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Too many attempts');
+    });
+  });
+
   describe('unknown message type', () => {
     it('returns error for unknown type', async () => {
       const response = await sendMessage({ type: 'NONEXISTENT_ACTION' });

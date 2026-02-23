@@ -1,4 +1,4 @@
-import type { PaperwallConfig, PaymentReceipt, PaymentError } from './types';
+import type { PaperwallConfig, PaymentReceipt, PaymentError, OptimisticAccessInfo } from './types';
 
 /** How long to wait for payment result before timing out (ms). */
 const PAYMENT_TIMEOUT_MS = 120_000;
@@ -56,13 +56,25 @@ export function initMessaging(config: PaperwallConfig): void {
     if (data.type !== 'PAPERWALL_PAYMENT_RESULT') return;
     if (data.requestId !== requestId) return;
 
-    // Clear timeout since we received a response
+    // Optimistic result: fire callback but keep listening for confirmation
+    if (data.optimistic && data.success) {
+      if (config.onOptimisticAccess) {
+        config.onOptimisticAccess({
+          url: window.location.href,
+          amount: (data.receipt as Record<string, unknown>)?.['amount'] as string ?? config.price,
+          requestId,
+        });
+      }
+      // Do NOT clear timeout or remove handler — wait for confirmed/failed
+      return;
+    }
+
+    // Final result (confirmed or failed): clear timeout and handler
     if (paymentTimeoutId !== null) {
       clearTimeout(paymentTimeoutId);
       paymentTimeoutId = null;
     }
 
-    // Clean up handler to prevent dual callbacks
     if (activeHandler) {
       window.removeEventListener('message', activeHandler);
       activeHandler = null;

@@ -1,4 +1,5 @@
 import type { PaymentRecord } from '../../background/history.js';
+import { formatRelativeTime } from '../../shared/format.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -177,14 +178,3 @@ function bucketRecords(
   return [...buckets.entries()];
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const diffMs = Date.now() - timestamp;
-  const diffMinutes = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMs < 60_000) return 'just now';
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}

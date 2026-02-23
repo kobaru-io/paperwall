@@ -11,7 +11,8 @@ This document explains the **why** behind Paperwall's architecture. For the tech
 5. [Extension Works in All Modes](#extension-works-in-all-modes)
 6. [Browser Extension: Intentionally a Pseudo-Wallet](#browser-extension-intentionally-a-pseudo-wallet)
 7. [Agent: Machine-Bound Wallet Encryption](#agent-machine-bound-wallet-encryption)
-8. [Other Design Decisions](#other-design-decisions)
+8. [Optimistic Settlement: Default-On for Tier 1 & 2](#optimistic-settlement-default-on-for-tier-1--2)
+9. [Other Design Decisions](#other-design-decisions)
 
 ---
 
@@ -320,6 +321,90 @@ As an alternative to encrypted files, the agent can store private keys in the OS
 **Why optional dependency:** `@napi-rs/keyring` includes native binaries that may not compile on all platforms. Making it optional means the agent works everywhere (file-based storage is always available), with keychain as an enhancement on supported desktops.
 
 **Trade-offs:** Keychain is unavailable in headless/container environments. The key is stored in plaintext within the OS credential store (protected by OS-level access control, not by Paperwall's own encryption).
+
+---
+
+## Optimistic Settlement: Default-On for Tier 1 & 2
+
+### The Design Choice
+
+Paperwall delivers content to the reader **immediately after signing**, before blockchain settlement confirms. Settlement continues in the background. If it fails, the reader is notified. This is the default behavior for Tier 1 and Tier 2 — publishers must explicitly opt out with `data-optimistic="false"`.
+
+### Why This Is the Default
+
+#### 1. Latency Is the Enemy of Micropayments
+
+On-chain settlement on SKALE takes 1-5 seconds. For a $0.01 article payment, making the reader wait for blockchain confirmation is absurd — it's like waiting for ACH clearance before reading a newspaper. The perceived value of the content doesn't justify the wait.
+
+**Traditional flow:** Sign → Settle (1-5s) → Deliver content
+**Optimistic flow:** Sign → Deliver content immediately → Settle in background
+
+The optimistic flow removes the critical-path latency entirely. The reader experiences instant access.
+
+#### 2. Command-Query Responsibility Segregation (CQRS)
+
+The insight behind optimistic settlement is a CQRS-style separation: **reading content** and **settling payment** are independent operations that don't need to be coupled.
+
+- **Command (write):** "Transfer 10000 USDC from reader to publisher" — this is the settlement, it's async and eventually consistent.
+- **Query (read):** "Show me the article" — this can happen immediately once the reader has demonstrated intent to pay (by signing).
+
+The signing step proves the reader authorized payment. The on-chain transfer is just execution of that authorization. There's no reason to block content delivery on execution when the authorization is already cryptographically committed.
+
+#### 3. Risk Analysis Favors the Reader
+
+For micropayments ($0.01-$1.00), the risk of optimistic delivery is asymmetric:
+
+| Scenario | Probability | Impact |
+|----------|------------|--------|
+| Settlement succeeds | >99.9% | Normal flow, everyone happy |
+| Settlement fails (network issue) | <0.1% | Reader saw a $0.01 article for free. Publisher lost $0.01. |
+| Settlement fails (insufficient funds) | Near zero (pre-flight balance check) | Same as above |
+
+The expected loss is fractions of a cent per thousand transactions. The UX gain (instant access for every reader, every time) vastly outweighs this risk.
+
+#### 4. Consistency with Existing Payment Models
+
+Real-world payment systems already use optimistic patterns:
+
+- **Credit cards:** You get your coffee immediately. Settlement happens in 2-3 business days.
+- **Tap-to-pay:** Offline mode authorizes up to $250 without contacting the bank.
+- **Ride-sharing:** You exit the car before the charge clears.
+- **App stores:** Downloads start before payment processor confirms.
+
+Paperwall's optimistic settlement follows the same principle: **authorize first, settle asynchronously**.
+
+### Why Not Default-On for Tier 3?
+
+Tier 3 (server mode) publishers control the flow themselves. Their backend decides when to release content. Optimistic delivery doesn't apply because:
+- The publisher's server calls `/settle`, not the extension
+- Content is gated server-side, not client-side
+- High-value content ($5+) justifies the wait for confirmation
+- The publisher may need the transaction hash for access control or audit purposes
+
+### Recovery and Safety
+
+Optimistic settlement includes safety mechanisms:
+
+- **Pre-flight balance check:** Before signing, the extension verifies the reader has sufficient funds. This eliminates the most common failure mode.
+- **Background settlement tracking:** Pending settlements are stored in `chrome.storage.session` and recovered if the service worker restarts (`recoverPendingPayments()`).
+- **Status updates:** The SDK receives `PAYMENT_CONFIRMED` or `PAYMENT_SETTLE_FAILED` messages after background settlement completes, allowing publishers to react (e.g., re-gate content on failure).
+- **Agent flush:** The CLI agent calls `flushPendingSettlements()` before process exit to ensure in-flight settlements complete.
+
+### Publisher Opt-Out
+
+Publishers who need confirmed settlement before content delivery can set `data-optimistic="false"`:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+  data-optimistic="false"
+  ...other attributes...
+></script>
+```
+
+This reverts to the standard sequential flow: sign → settle → deliver. Use this when:
+- Content has high per-view value and settlement failure is unacceptable
+- You need the transaction hash before granting access
+- Your business model requires confirmed payment (e.g., one-time downloads)
 
 ---
 

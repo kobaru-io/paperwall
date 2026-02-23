@@ -71,6 +71,14 @@ export async function verify(
   payload: PaymentPayload,
   requirements: PaymentRequirements,
 ): Promise<VerifyResponse> {
+  // Validate facilitator URL for security
+  if (!isAllowedFacilitatorUrl(facilitatorUrl)) {
+    throw new FacilitatorError(
+      'Facilitator URL must be HTTPS and cannot be a private IP address',
+      'INVALID_URL',
+    );
+  }
+
   const url = `${facilitatorUrl.replace(/\/$/, '')}/verify`;
   const headers = buildHeaders(siteKey);
 

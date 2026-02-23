@@ -87,13 +87,14 @@ vi.mock('../src/background/payment-client.js', () => ({
 vi.mock('../src/background/history.js', () => ({
   addPayment: vi.fn(),
   getHistory: vi.fn(),
+  updatePaymentStatus: vi.fn(),
 }));
 
 import { handleMessage } from '../src/background/message-router.js';
 import { getSupported, settle, verify } from '../src/background/facilitator.js';
 import { fetchBalance } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
-import { addPayment } from '../src/background/history.js';
+import { addPayment, updatePaymentStatus } from '../src/background/history.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -132,6 +133,7 @@ describe('payment-flow', () => {
     vi.mocked(settle).mockReset();
     vi.mocked(createSignedPayload).mockReset();
     vi.mocked(addPayment).mockReset();
+    vi.mocked(updatePaymentStatus).mockReset();
     tabsOnRemovedListeners.length = 0;
   });
 
@@ -145,6 +147,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -176,6 +179,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -226,6 +230,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -326,6 +331,7 @@ describe('payment-flow', () => {
         price: '100000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -373,6 +379,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -406,6 +413,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -502,6 +510,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -598,6 +607,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -631,6 +641,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -710,6 +721,7 @@ describe('payment-flow', () => {
         price: '10000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -745,6 +757,7 @@ describe('payment-flow', () => {
         price: '100000',
         network: 'eip155:324705682',
         mode: 'client',
+        optimistic: 'false',
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
@@ -769,6 +782,304 @@ describe('payment-flow', () => {
 
       const response = await sendMessage({ type: 'GET_PAGE_STATE', tabId: 1 });
       expect(response.canAfford).toBe(false);
+    });
+  });
+
+  describe('concurrent payment prevention', () => {
+    it('rejects second SIGN_AND_PAY while first is in progress for same tab', async () => {
+      await setupUnlockedWallet();
+
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:324705682',
+            amount: '10000',
+            asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+            payTo: '0xreceiver',
+          }],
+        },
+      });
+
+      vi.mocked(fetchBalance).mockResolvedValue({
+        raw: '500000',
+        formatted: '0.50',
+        network: 'eip155:324705682',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+        fetchedAt: Date.now(),
+      });
+      vi.mocked(getSupported).mockResolvedValue({
+        kinds: [{
+          x402Version: 2,
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          extra: { name: 'USD Coin', version: '2' },
+        }],
+        extensions: [],
+        signers: {},
+      });
+      vi.mocked(createSignedPayload).mockResolvedValue({
+        x402Version: 2,
+        resource: { url: 'https://example.com/article', description: '', mimeType: '' },
+        accepted: {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+          amount: '10000',
+          payTo: '0xreceiver',
+          maxTimeoutSeconds: 300,
+          extra: { name: 'USD Coin', version: '2' },
+        },
+        payload: {
+          signature: '0xsignature',
+          authorization: {
+            from: '0xsender',
+            to: '0xreceiver',
+            value: '10000',
+            validAfter: '0',
+            validBefore: '99999999',
+            nonce: '0x1234',
+          },
+        },
+      });
+      vi.mocked(verify).mockResolvedValue({ isValid: true });
+
+      // Make settle slow so the first payment is still in progress
+      vi.mocked(settle).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({
+          success: true,
+          transaction: '0xtxhash',
+          network: 'eip155:324705682',
+        }), 100)),
+      );
+
+      // Fire both payments concurrently
+      const [first, second] = await Promise.all([
+        sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 }),
+        sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 }),
+      ]);
+
+      // One should succeed, one should be rejected
+      const results = [first, second];
+      const succeeded = results.filter((r) => r.success === true);
+      const rejected = results.filter((r) => r.success === false);
+
+      expect(succeeded).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.error).toContain('Payment already in progress');
+    });
+  });
+
+  describe('skip-verify', () => {
+    async function setupPaymentMocks() {
+      vi.mocked(fetchBalance).mockResolvedValue({
+        raw: '500000', formatted: '0.50', network: 'eip155:324705682',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', fetchedAt: Date.now(),
+      });
+      vi.mocked(getSupported).mockResolvedValue({
+        kinds: [{ x402Version: 2, scheme: 'exact', network: 'eip155:324705682', extra: { name: 'USD Coin', version: '2' } }],
+        extensions: [], signers: {},
+      });
+      vi.mocked(createSignedPayload).mockResolvedValue({
+        x402Version: 2,
+        resource: { url: 'https://example.com/article', description: '', mimeType: '' },
+        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+      });
+      vi.mocked(verify).mockResolvedValue({ isValid: true });
+      vi.mocked(settle).mockResolvedValue({ success: true, transaction: '0xtxhash', network: 'eip155:324705682' });
+    }
+
+    async function setupPageState(overrides?: Record<string, unknown>) {
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' }],
+        },
+        ...overrides,
+      });
+    }
+
+    it('should skip verify call when skipVerify setting is true', async () => {
+      await setupUnlockedWallet();
+      localStorageMock.set({ settings: { skipVerify: true } });
+      await setupPageState();
+      await setupPaymentMocks();
+
+      const response = await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+      expect(response.success).toBe(true);
+      expect(vi.mocked(verify)).not.toHaveBeenCalled();
+      expect(vi.mocked(settle)).toHaveBeenCalled();
+    });
+
+    it('should call verify when skipVerify is false (default)', async () => {
+      await setupUnlockedWallet();
+      await setupPageState();
+      await setupPaymentMocks();
+
+      const response = await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+      expect(response.success).toBe(true);
+      expect(vi.mocked(verify)).toHaveBeenCalled();
+    });
+  });
+
+  describe('optimistic payment flow', () => {
+    async function setupPaymentMocks(settleDelay?: number) {
+      vi.mocked(fetchBalance).mockResolvedValue({
+        raw: '500000', formatted: '0.50', network: 'eip155:324705682',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', fetchedAt: Date.now(),
+      });
+      vi.mocked(getSupported).mockResolvedValue({
+        kinds: [{ x402Version: 2, scheme: 'exact', network: 'eip155:324705682', extra: { name: 'USD Coin', version: '2' } }],
+        extensions: [], signers: {},
+      });
+      vi.mocked(createSignedPayload).mockResolvedValue({
+        x402Version: 2,
+        resource: { url: 'https://example.com/article', description: '', mimeType: '' },
+        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+      });
+      vi.mocked(verify).mockResolvedValue({ isValid: true });
+      if (settleDelay) {
+        vi.mocked(settle).mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ success: true, transaction: '0xtxhash', network: 'eip155:324705682' }), settleDelay)));
+      } else {
+        vi.mocked(settle).mockResolvedValue({ success: true, transaction: '0xtxhash', network: 'eip155:324705682' });
+      }
+    }
+
+    async function setupOptimisticPageState() {
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'true',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' }],
+        },
+      });
+    }
+
+    it('should send PAYMENT_OPTIMISTIC immediately and return optimistic result', async () => {
+      await setupUnlockedWallet();
+      await setupOptimisticPageState();
+      await setupPaymentMocks();
+
+      const response = await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+      expect(response.success).toBe(true);
+      expect(response.optimistic).toBe(true);
+
+      // PAYMENT_OPTIMISTIC should have been sent to the tab
+      expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
+        type: 'PAYMENT_OPTIMISTIC',
+      }));
+    });
+
+    it('should write history as pending for optimistic flow', async () => {
+      await setupUnlockedWallet();
+      await setupOptimisticPageState();
+      await setupPaymentMocks();
+
+      await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+
+      expect(vi.mocked(addPayment)).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'pending',
+        txHash: '',
+      }));
+    });
+
+    it('should send PAYMENT_CONFIRMED after settlement succeeds', async () => {
+      await setupUnlockedWallet();
+      await setupOptimisticPageState();
+      await setupPaymentMocks();
+
+      await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+
+      // Wait for background settlement
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
+        type: 'PAYMENT_CONFIRMED',
+        receipt: expect.objectContaining({ txHash: '0xtxhash' }),
+      }));
+    });
+
+    it('should send PAYMENT_SETTLE_FAILED on settlement failure', async () => {
+      await setupUnlockedWallet();
+      await setupOptimisticPageState();
+      await setupPaymentMocks();
+      vi.mocked(settle).mockRejectedValue(new Error('RPC timeout'));
+
+      await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+
+      // Wait for background settlement
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
+        type: 'PAYMENT_SETTLE_FAILED',
+        error: expect.stringContaining('RPC timeout'),
+      }));
+    });
+
+    it('should use non-optimistic flow when optimistic=false', async () => {
+      await setupUnlockedWallet();
+
+      // Page state with optimistic=false
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' }],
+        },
+      });
+      await setupPaymentMocks();
+
+      const response = await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+      expect(response.success).toBe(true);
+      expect(response.optimistic).toBeUndefined();
+
+      // Should NOT have sent PAYMENT_OPTIMISTIC
+      const optimisticCalls = sendMessageToTabMock.mock.calls.filter(
+        (call: unknown[]) => (call[1] as Record<string, unknown>)?.type === 'PAYMENT_OPTIMISTIC',
+      );
+      expect(optimisticCalls).toHaveLength(0);
+
+      // Should have sent PAYMENT_COMPLETE
+      expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
+        type: 'PAYMENT_COMPLETE',
+      }));
     });
   });
 

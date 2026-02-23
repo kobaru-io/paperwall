@@ -137,6 +137,91 @@ describe('bridge', () => {
     });
   });
 
+  describe('optimistic message relay', () => {
+    function getRuntimeListener() {
+      const addListenerMock = vi.mocked(chrome.runtime.onMessage.addListener);
+      return addListenerMock.mock.calls[0]![0];
+    }
+
+    it('should relay PAYMENT_OPTIMISTIC as PAPERWALL_PAYMENT_RESULT with optimistic=true', async () => {
+      const postedMessages: Array<Record<string, unknown>> = [];
+      const msgListener = (event: MessageEvent) => {
+        if (event.data?.type === 'PAPERWALL_PAYMENT_RESULT') {
+          postedMessages.push(event.data);
+        }
+      };
+      window.addEventListener('message', msgListener);
+      initBridge();
+
+      getRuntimeListener()(
+        { type: 'PAYMENT_OPTIMISTIC', requestId: 'req-1', amount: '50000', url: 'https://example.com' },
+        {} as chrome.runtime.MessageSender,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(postedMessages.length).toBeGreaterThanOrEqual(1);
+      const msg = postedMessages.find(m => m.optimistic === true)!;
+      expect(msg.type).toBe('PAPERWALL_PAYMENT_RESULT');
+      expect(msg.requestId).toBe('req-1');
+      expect(msg.success).toBe(true);
+      expect(msg.optimistic).toBe(true);
+
+      window.removeEventListener('message', msgListener);
+    });
+
+    it('should relay PAYMENT_CONFIRMED as PAPERWALL_PAYMENT_RESULT with confirmed=true', async () => {
+      const postedMessages: Array<Record<string, unknown>> = [];
+      const msgListener = (event: MessageEvent) => {
+        if (event.data?.type === 'PAPERWALL_PAYMENT_RESULT') {
+          postedMessages.push(event.data);
+        }
+      };
+      window.addEventListener('message', msgListener);
+      initBridge();
+
+      getRuntimeListener()(
+        { type: 'PAYMENT_CONFIRMED', requestId: 'req-1', success: true, receipt: { txHash: '0xabc' } },
+        {} as chrome.runtime.MessageSender,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const msg = postedMessages.find(m => m.confirmed === true)!;
+      expect(msg.type).toBe('PAPERWALL_PAYMENT_RESULT');
+      expect(msg.success).toBe(true);
+      expect(msg.confirmed).toBe(true);
+
+      window.removeEventListener('message', msgListener);
+    });
+
+    it('should relay PAYMENT_SETTLE_FAILED as PAPERWALL_PAYMENT_RESULT with success=false', async () => {
+      const postedMessages: Array<Record<string, unknown>> = [];
+      const msgListener = (event: MessageEvent) => {
+        if (event.data?.type === 'PAPERWALL_PAYMENT_RESULT') {
+          postedMessages.push(event.data);
+        }
+      };
+      window.addEventListener('message', msgListener);
+      initBridge();
+
+      getRuntimeListener()(
+        { type: 'PAYMENT_SETTLE_FAILED', requestId: 'req-1', success: false, error: 'Timeout' },
+        {} as chrome.runtime.MessageSender,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(postedMessages.length).toBeGreaterThanOrEqual(1);
+      const msg = postedMessages[0]!;
+      expect(msg.type).toBe('PAPERWALL_PAYMENT_RESULT');
+      expect(msg.success).toBe(false);
+      expect(msg.error).toBe('Timeout');
+
+      window.removeEventListener('message', msgListener);
+    });
+  });
+
   describe('PING/PONG', () => {
     it('PAPERWALL_PING receives PAPERWALL_PONG response (no SW needed)', async () => {
       const postedMessages: Array<Record<string, unknown>> = [];

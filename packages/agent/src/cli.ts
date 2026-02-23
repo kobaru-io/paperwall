@@ -6,7 +6,7 @@ import { setBudget, getBudget, smallestToUsdc, usdcToSmallest } from './budget.j
 import { getRecent, getSpendingTotals } from './history.js';
 import { readJsonFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
-import { fetchWithPayment } from './payment-engine.js';
+import { fetchWithPayment, flushPendingSettlements } from './payment-engine.js';
 
 import type { WalletFile } from './wallet.js';
 
@@ -313,12 +313,14 @@ export function buildProgram(): Command {
     .option('-m, --max-price <amount>', 'Maximum USDC to pay per request')
     .option('-n, --network <caip2>', 'Force specific network (CAIP-2)')
     .option('-t, --timeout <ms>', 'Request timeout in milliseconds', '30000')
-    .action(async (url: string, options: { maxPrice?: string; network?: string; timeout: string }) => {
+    .option('--no-optimistic', 'Wait for settlement before returning content')
+    .action(async (url: string, options: { maxPrice?: string; network?: string; timeout: string; optimistic?: boolean }) => {
       try {
         const result = await fetchWithPayment(url, {
           maxPrice: options.maxPrice,
           network: options.network,
           timeout: Number.isNaN(parseInt(options.timeout, 10)) ? 30000 : parseInt(options.timeout, 10),
+          optimistic: options.optimistic ?? (process.env['PAPERWALL_OPTIMISTIC'] !== '0' && process.env['PAPERWALL_OPTIMISTIC'] !== 'false'),
         });
 
         if (result.ok) {
@@ -331,6 +333,9 @@ export function buildProgram(): Command {
             process.exitCode = exitCode;
           }
         }
+
+        // Wait for any background optimistic settlements before exiting
+        await flushPendingSettlements();
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         outputError('unexpected_error', message, 1);

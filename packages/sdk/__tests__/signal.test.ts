@@ -78,6 +78,24 @@ describe('emitSignal', () => {
     expect(meta.hasAttribute('data-site-key')).toBe(false);
   });
 
+  it('should emit data-optimistic="true" by default', () => {
+    emitSignal(VALID_CONFIG);
+    const meta = getMetaTag()!;
+    expect(meta.getAttribute('data-optimistic')).toBe('true');
+  });
+
+  it('should emit data-optimistic="false" when publisher opts out', () => {
+    emitSignal({ ...VALID_CONFIG, optimistic: false });
+    const meta = getMetaTag()!;
+    expect(meta.getAttribute('data-optimistic')).toBe('false');
+  });
+
+  it('should emit data-optimistic="true" when explicitly set', () => {
+    emitSignal({ ...VALID_CONFIG, optimistic: true });
+    const meta = getMetaTag()!;
+    expect(meta.getAttribute('data-optimistic')).toBe('true');
+  });
+
   it('calling emitSignal() twice replaces (not duplicates) the meta tag', () => {
     emitSignal(VALID_CONFIG);
     emitSignal({ ...VALID_CONFIG, price: '20000' });

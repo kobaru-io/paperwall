@@ -45,6 +45,10 @@ export function emitSignal(config: PaperwallConfig): void {
     meta.setAttribute('data-site-key', config.siteKey);
   }
 
+  // Optimistic defaults to true; emit as data attribute for extension/agent to read
+  const optimistic = config.optimistic !== false;
+  meta.setAttribute('data-optimistic', String(optimistic));
+
   document.head.appendChild(meta);
 }
 

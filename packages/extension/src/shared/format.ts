@@ -1,18 +1,23 @@
 /**
  * Formats USDC amount from smallest unit (6 decimals) to human-readable string.
+ * Shows up to 6 decimal places, trimming trailing zeros but keeping at least 2.
  * Examples:
- *   10000n → "0.01"
+ *   1n       → "0.000001"
+ *   10000n   → "0.01"
  *   1000000n → "1.00"
  *   1500000n → "1.50"
- *   1560000n → "1.56"
+ *   1234567n → "1.234567"
+ *   1234560n → "1.23456"
  */
 export function formatUsdc(smallestUnit: bigint): string {
   const divisor = 1_000_000n;
   const whole = smallestUnit / divisor;
   const remainder = smallestUnit % divisor;
-  const decimal =
-    remainder.toString().padStart(6, '0').replace(/0+$/, '') || '0';
-  return `${whole}.${decimal.length < 2 ? decimal.padEnd(2, '0') : decimal}`;
+  const full = remainder.toString().padStart(6, '0');
+  // Trim trailing zeros but keep at least 2 decimal places
+  const trimmed = full.replace(/0+$/, '');
+  const decimal = trimmed.length < 2 ? full.slice(0, 2) : trimmed;
+  return `${whole}.${decimal}`;
 }
 
 /**
@@ -20,4 +25,19 @@ export function formatUsdc(smallestUnit: bigint): string {
  */
 export function formatUsdcFromString(smallestUnit: string): string {
   return formatUsdc(BigInt(smallestUnit));
+}
+
+/**
+ * Formats a timestamp as a relative time string (e.g., "just now", "5m ago").
+ */
+export function formatRelativeTime(timestamp: number): string {
+  const diffMs = Date.now() - timestamp;
+  const diffMinutes = Math.floor(diffMs / 60_000);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMs < 60_000) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
 }

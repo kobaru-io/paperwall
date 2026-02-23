@@ -101,6 +101,8 @@ export function parseConfig(input: Partial<PaperwallConfig>): PaperwallConfig {
     siteKey: input.siteKey,
     onPaymentSuccess: input.onPaymentSuccess,
     onPaymentError: input.onPaymentError,
+    optimistic: input.optimistic,
+    onOptimisticAccess: input.onOptimisticAccess,
   };
 }
 
@@ -125,6 +127,8 @@ export function parseScriptTag(scriptElement: HTMLScriptElement): PaperwallConfi
   const asset = scriptElement.getAttribute('data-asset') ?? undefined;
   const paymentUrl = scriptElement.getAttribute('data-payment-url') ?? undefined;
   const siteKey = scriptElement.getAttribute('data-site-key') ?? undefined;
+  const rawOptimistic = scriptElement.getAttribute('data-optimistic');
+  const optimistic = rawOptimistic === 'false' ? false : undefined;
 
   return parseConfig({
     facilitatorUrl,
@@ -135,5 +139,6 @@ export function parseScriptTag(scriptElement: HTMLScriptElement): PaperwallConfi
     mode,
     paymentUrl,
     siteKey,
+    optimistic,
   });
 }

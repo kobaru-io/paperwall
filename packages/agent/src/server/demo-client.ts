@@ -199,14 +199,22 @@ export function buildDemoSummary(results: DemoStepResult[]): DemoSummary {
     (r) => r.outcome === 'declined',
   ).length;
 
-  // Sum payments using integer-cent math to avoid float errors
-  let totalCents = 0;
+  // Sum payments using smallest-unit BigInt math to preserve full 6-decimal precision
+  let totalSmallest = 0n;
   for (const r of results) {
     if (r.payment?.amountFormatted) {
-      totalCents += Math.round(parseFloat(r.payment.amountFormatted) * 100);
+      const parts = r.payment.amountFormatted.split('.');
+      const whole = BigInt(parts[0] ?? '0');
+      const fracStr = (parts[1] ?? '').padEnd(6, '0').slice(0, 6);
+      totalSmallest += whole * 1_000_000n + BigInt(fracStr);
     }
   }
-  const totalUsdcSpent = (totalCents / 100).toFixed(2);
+  const totalWhole = totalSmallest / 1_000_000n;
+  const totalFrac = totalSmallest % 1_000_000n;
+  const fullDec = totalFrac.toString().padStart(6, '0');
+  const trimmedDec = fullDec.replace(/0+$/, '');
+  const decPart = trimmedDec.length < 2 ? fullDec.slice(0, 2) : trimmedDec;
+  const totalUsdcSpent = `${totalWhole}.${decPart}`;
 
   // Collect explorer URLs from verification, fall back to tx hashes
   const explorerLinks: string[] = [];

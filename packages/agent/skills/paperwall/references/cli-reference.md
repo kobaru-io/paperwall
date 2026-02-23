@@ -21,6 +21,7 @@ paperwall fetch <url> [options]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--max-price <amount>` | - | Maximum USDC to pay (e.g., "0.05" for 5 cents). Required if no budget is configured. |
+| `--no-optimistic` | - | Disable optimistic settlement. By default, the agent returns content immediately after signing, while settlement continues in the background. Use this flag to wait for on-chain confirmation before returning. |
 | `--timeout <ms>` | 30000 | Request timeout in milliseconds |
 
 ### Payment Detection Priority
@@ -47,7 +48,8 @@ paperwall fetch <url> [options]
     "network": "eip155:324705682",
     "txHash": "0xabc123...",
     "payTo": "0x1234...publisher",
-    "payer": "0x5678...your-wallet"
+    "payer": "0x5678...your-wallet",
+    "status": "confirmed"
   }
 }
 ```
@@ -346,6 +348,7 @@ paperwall demo --server <url> [options]
 | `PAPERWALL_HOST` | A2A server bind address (default: 0.0.0.0) |
 | `PAPERWALL_NETWORK` | CAIP-2 network ID (default: `eip155:324705682` = SKALE Base Sepolia testnet) |
 | `PAPERWALL_ACCESS_KEYS` | Comma-separated Bearer tokens for A2A server authentication |
+| `PAPERWALL_OPTIMISTIC` | Set to `"false"` to disable optimistic settlement globally (default: `"true"`) |
 
 ---
 

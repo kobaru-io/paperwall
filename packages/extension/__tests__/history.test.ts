@@ -34,7 +34,7 @@ vi.stubGlobal('chrome', {
   },
 });
 
-import { addPayment, getHistory, type PaymentRecord } from '../src/background/history.js';
+import { addPayment, getHistory, updatePaymentStatus, type PaymentRecord } from '../src/background/history.js';
 
 // ── Tests ──────────────────────────────────────────────────────────
 
@@ -130,6 +130,32 @@ describe('history', () => {
     it('returns empty array when no records', async () => {
       const result = await getHistory(10, 0);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('updatePaymentStatus', () => {
+    it('should store payment with pending status', async () => {
+      await addPayment(makeRecord({ status: 'pending', txHash: '' }));
+      const history = await getHistory();
+      expect(history[0]!.status).toBe('pending');
+    });
+
+    it('should update payment status to confirmed', async () => {
+      const record = makeRecord({ status: 'pending', txHash: '' });
+      await addPayment(record);
+      await updatePaymentStatus(record.requestId, 'confirmed', { txHash: '0xabc', settledAt: Date.now() });
+      const history = await getHistory();
+      expect(history[0]!.status).toBe('confirmed');
+      expect(history[0]!.txHash).toBe('0xabc');
+    });
+
+    it('should update payment status to failed', async () => {
+      const record = makeRecord({ status: 'pending', txHash: '' });
+      await addPayment(record);
+      await updatePaymentStatus(record.requestId, 'failed', { error: 'Settlement timeout' });
+      const history = await getHistory();
+      expect(history[0]!.status).toBe('failed');
+      expect(history[0]!.error).toBe('Settlement timeout');
     });
   });
 

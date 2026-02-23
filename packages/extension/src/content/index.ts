@@ -5,10 +5,12 @@ import type { DetectedPage } from './detector.js';
 // ── Content Script Entry Point ───────────────────────────────────
 
 function handleDetection(detected: DetectedPage): void {
-  // FIX CRITICAL-3: Extract price and network from signal to unify with bridge path
+  // Extract first offer — skip if accepts is empty (no valid payment options)
   const offer = detected.signal.accepts[0];
-  const price = offer?.amount;
-  const network = offer?.network;
+  if (!offer) return;
+
+  const price = offer.amount;
+  const network = offer.network;
 
   // Notify the service worker about the detected Paperwall page
   chrome.runtime.sendMessage({
@@ -16,6 +18,7 @@ function handleDetection(detected: DetectedPage): void {
     facilitatorUrl: detected.facilitatorUrl,
     mode: detected.mode,
     siteKey: detected.siteKey,
+    optimistic: detected.optimistic,
     signal: detected.signal,
     price, // Include price at top level
     network, // Include network at top level

@@ -258,6 +258,124 @@ describe('destroyMessaging', () => {
   });
 });
 
+describe('optimistic payment flow', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '550e8400-e29b-41d4-a716-446655440000',
+    });
+  });
+
+  afterEach(() => {
+    destroyMessaging();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('fires onOptimisticAccess for optimistic payment result', async () => {
+    const optimisticSpy = vi.fn();
+    const config: PaperwallConfig = {
+      ...VALID_CONFIG,
+      onOptimisticAccess: optimisticSpy,
+    };
+
+    initMessaging(config);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: '550e8400-e29b-41d4-a716-446655440000',
+          success: true,
+          optimistic: true,
+          receipt: { amount: '10000', url: 'https://example.com' },
+        },
+        origin: window.location.origin,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(optimisticSpy).toHaveBeenCalledOnce();
+    expect(optimisticSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: window.location.href,
+        amount: '10000',
+        requestId: '550e8400-e29b-41d4-a716-446655440000',
+      }),
+    );
+  });
+
+  it('fires onPaymentSuccess for confirmed payment result', async () => {
+    const successSpy = vi.fn();
+    const config: PaperwallConfig = {
+      ...VALID_CONFIG,
+      onPaymentSuccess: successSpy,
+    };
+
+    initMessaging(config);
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: '550e8400-e29b-41d4-a716-446655440000',
+          success: true,
+          confirmed: true,
+          receipt: { txHash: '0xabc', amount: '10000', from: '0x1234', to: VALID_CONFIG.payTo },
+        },
+        origin: window.location.origin,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(successSpy).toHaveBeenCalledOnce();
+  });
+
+  it('does not clear handler on optimistic result (waits for confirmed)', async () => {
+    const optimisticSpy = vi.fn();
+    const successSpy = vi.fn();
+    const config: PaperwallConfig = {
+      ...VALID_CONFIG,
+      onOptimisticAccess: optimisticSpy,
+      onPaymentSuccess: successSpy,
+    };
+
+    initMessaging(config);
+
+    // First: optimistic
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: '550e8400-e29b-41d4-a716-446655440000',
+          success: true,
+          optimistic: true,
+          receipt: { amount: '10000' },
+        },
+        origin: window.location.origin,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(optimisticSpy).toHaveBeenCalledOnce();
+
+    // Then: confirmed
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          type: 'PAPERWALL_PAYMENT_RESULT',
+          requestId: '550e8400-e29b-41d4-a716-446655440000',
+          success: true,
+          confirmed: true,
+          receipt: { txHash: '0xabc', amount: '10000', from: '0x1234', to: VALID_CONFIG.payTo },
+        },
+        origin: window.location.origin,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(successSpy).toHaveBeenCalledOnce();
+  });
+});
+
 describe('PAPERWALL_SIGNATURE (server mode)', () => {
   beforeEach(() => {
     vi.useFakeTimers();

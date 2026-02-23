@@ -66,6 +66,11 @@ Here is what each part means:
 | `data-mode` | Payment mode: `"client"` (extension calls facilitator) or `"server"` (your server calls facilitator) | `"client"` |
 | `data-payment-url` | Your server endpoint for server-mode payments (required when `data-mode="server"`) | -- |
 | `data-site-key` | Optional public credential for facilitator authentication | -- |
+| `data-optimistic` | Whether to unlock content before settlement confirms: `"true"` or `"false"` | `"true"` |
+
+When `data-optimistic="true"` (the default), the reader gets instant content access after payment signing, without waiting for blockchain confirmation. Settlement happens in the background. If settlement fails (rare), the `onPaymentError` callback fires. This is recommended for micropayments where speed matters more than guaranteed settlement.
+
+Set `data-optimistic="false"` if you need confirmed settlement before unlocking content.
 
 For details on client vs server mode and choosing the right trust level for your content, see [Understanding payment tiers](#understanding-payment-tiers).
 
@@ -156,6 +161,14 @@ If you need more control, you can initialize Paperwall with JavaScript instead o
     onPaymentError: function (error) {
       // Payment failed or was rejected by the reader.
       console.warn('Payment error:', error.code, error.message);
+    },
+    onOptimisticAccess: function (info) {
+      // Called immediately when optimistic settlement is enabled (default).
+      // Content should be unlocked now -- settlement is in progress.
+      console.log('Optimistic access granted, settling in background...');
+      document.querySelectorAll('.ad-banner').forEach(function (ad) {
+        ad.style.display = 'none';
+      });
     }
   });
 </script>
@@ -171,6 +184,15 @@ If you need more control, you can initialize Paperwall with JavaScript instead o
 | `from` | The reader's wallet address | `0x9876...` |
 | `to` | Your wallet address | `0x1234...` |
 | `settledAt` | When the payment was confirmed (ISO 8601) | `2026-02-11T14:30:00Z` |
+
+**`onOptimisticAccess` callback** receives an info object with:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `network` | Which network the payment is settling on | `eip155:324705682` |
+| `amount` | Amount being paid in micro-units | `10000` |
+
+This callback fires immediately after the reader approves payment, before blockchain confirmation. Use it to unlock content instantly. The `onPaymentSuccess` callback will fire later when settlement confirms, or `onPaymentError` if settlement fails. If you don't provide `onOptimisticAccess`, the SDK falls back to waiting for `onPaymentSuccess`.
 
 **`onPaymentError` callback** receives an error object with:
 

@@ -2,6 +2,9 @@
 // Displayed when the user is on a Paperwall page and clicks "Pay".
 // Shows site info, price, and approve/reject buttons.
 
+import { formatUsdcFromString } from '../../shared/format.js';
+import { getNetwork } from '../../shared/constants.js';
+
 interface PageState {
   origin: string;
   price: string;
@@ -43,7 +46,7 @@ export function renderPaymentPrompt(
 
   const priceValue = document.createElement('p');
   priceValue.className = 'payment-value payment-price';
-  priceValue.textContent = `$${formatAmount(pageState.price)} USDC`;
+  priceValue.textContent = `$${formatUsdcFromString(pageState.price)} USDC`;
 
   const networkLabel = document.createElement('p');
   networkLabel.className = 'payment-label';
@@ -98,8 +101,11 @@ export function renderPaymentPrompt(
       : 'payment-status payment-status--success';
   }
 
-  // Approve handler
+  // Approve handler (guard against rapid double-click)
+  let approveInProgress = false;
   async function handleApprove(): Promise<void> {
+    if (approveInProgress) return;
+    approveInProgress = true;
     setLoading(true);
     statusDisplay.textContent = 'Signing and sending payment...';
     statusDisplay.className = 'payment-status';
@@ -148,14 +154,6 @@ export function renderPaymentPrompt(
   approveButton.addEventListener('click', handleApprove);
   rejectButton.addEventListener('click', handleReject);
 
-  // Keyboard support
-  approveButton.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleApprove();
-    }
-  });
-
   container.append(
     heading,
     description,
@@ -168,11 +166,6 @@ export function renderPaymentPrompt(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
-
-import { formatUsdcFromString } from '../../shared/format.js';
-import { getNetwork } from '../../shared/constants.js';
-
-const formatAmount = formatUsdcFromString;
 
 function formatNetworkName(caip2: string): string {
   try {

@@ -76,6 +76,22 @@ export interface PaperwallConfig {
   onPaymentSuccess?: (receipt: PaymentReceipt) => void;
   /** Callback fired on payment error. */
   onPaymentError?: (error: PaymentError) => void;
+  /** Whether to deliver content optimistically before settlement confirms (default: true). */
+  optimistic?: boolean;
+  /** Callback fired when content is optimistically unlocked (before settlement confirms). */
+  onOptimisticAccess?: (info: OptimisticAccessInfo) => void;
+}
+
+/**
+ * Info provided when content is optimistically unlocked.
+ */
+export interface OptimisticAccessInfo {
+  /** The URL being accessed. */
+  readonly url: string;
+  /** Payment amount in smallest unit. */
+  readonly amount: string;
+  /** Unique request identifier. */
+  readonly requestId: string;
 }
 
 /**

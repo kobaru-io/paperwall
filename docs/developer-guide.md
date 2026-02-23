@@ -98,7 +98,6 @@ paperwall/
           message-router.ts # Central message handler (all types)
           key-manager.ts    # Key generation, PBKDF2+AES-256-GCM encryption
           payment-client.ts # x402 client wrapper (EIP-712 signing via @x402/evm)
-          signer.ts         # Standalone EIP-712 signing (not used in main flow)
           facilitator.ts    # HTTP client for facilitator service
           balance.ts        # On-chain USDC balance queries (with cache)
           history.ts        # Payment history (chrome.storage.local)
@@ -132,7 +131,6 @@ paperwall/
         cli.ts              # Commander-based CLI (fetch, wallet, budget, history, serve, demo)
         payment-engine.ts   # Full x402 payment flow (402, client mode, server mode)
         wallet.ts           # Wallet creation, key resolution, balance checking
-        signer.ts           # Standalone EIP-712 signing (not used in main flow)
         facilitator.ts      # Facilitator HTTP client
         budget.ts           # Spending limits (per-request, daily, total)
         history.ts          # JSONL-based payment history
@@ -579,7 +577,7 @@ npm run test:watch --workspace=packages/sdk
 
 All packages use **Vitest**. Tests are co-located with source files (agent) or in `__tests__/` directories (SDK, extension).
 
-All packages use **Vitest**. Tests are co-located with source files (agent) or in `__tests__/` directories (SDK, extension). 300+ tests across all packages.
+All packages use **Vitest**. Tests are co-located with source files (agent) or in `__tests__/` directories (SDK, extension). 900+ tests across all packages.
 
 ### Test organization
 
@@ -590,20 +588,18 @@ All packages use **Vitest**. Tests are co-located with source files (agent) or i
 - `signal.test.ts` -- Meta tag emission and removal
 - `badge.test.ts` -- Badge DOM insertion and removal
 
-**Extension tests** -- 174 tests across 17 files:
+**Extension tests** -- 181 tests across 17 files:
 
 Background tests (`packages/extension/__tests__/`):
 - `message-router.test.ts` -- All message types, auth checks, error paths
 - `payment-flow.test.ts` -- Full payment orchestration
 - `key-manager.test.ts` -- Key generation, encryption, decryption
-- `signer.test.ts` -- EIP-712 signing
 - `facilitator.test.ts` -- HTTP client, URL validation, SSRF protection
 - `balance.test.ts` -- Balance fetching with caching
 - `bridge.test.ts` -- Content script bridge behavior
 - `detector.test.ts` -- Meta tag scanning and observation
 - `history.test.ts` -- Payment history storage
 - `x402-compliance.test.ts` -- x402 protocol compliance
-- `placeholder.test.ts` -- Placeholder tests
 
 Background tests (`packages/extension/src/background/__tests__/`):
 - `export-import.test.ts` -- EXPORT_PRIVATE_KEY and IMPORT_PRIVATE_KEY message handlers (17 tests). Covers sender origin validation, password validation, no-wallet errors, correct/wrong password, key format validation (hex chars, length), import with/without 0x prefix, session key cleared after import, overwriting existing wallet
@@ -747,10 +743,10 @@ The extension uses a layered message system:
 
 1. **SDK -> Content Script**: `window.postMessage({ type: 'PAPERWALL_PAYMENT_REQUIRED', ... })`
 2. **Content Script -> Service Worker**: `chrome.runtime.sendMessage({ type: 'PAGE_HAS_PAPERWALL', ... })`
-3. **Service Worker -> Content Script**: `chrome.tabs.sendMessage(tabId, { type: 'PAYMENT_COMPLETE', ... })`
+3. **Service Worker -> Content Script**: `chrome.tabs.sendMessage(tabId, { type: 'PAYMENT_COMPLETE', ... })` (also `PAYMENT_OPTIMISTIC`, `PAYMENT_CONFIRMED`, `PAYMENT_SETTLE_FAILED`)
 4. **Content Script -> SDK**: `window.postMessage({ type: 'PAPERWALL_PAYMENT_RESULT', ... })`
 
-The content script bridge (`bridge.ts`) translates between the `PAPERWALL_*` message namespace (page-facing) and internal extension messages.
+The content script bridge (`bridge.ts`) translates between the `PAPERWALL_*` message namespace (page-facing) and internal extension messages. For optimistic settlement, the bridge relays three additional message types: `PAYMENT_OPTIMISTIC` (content unlocked, settlement pending), `PAYMENT_CONFIRMED` (settlement succeeded), and `PAYMENT_SETTLE_FAILED` (settlement failed).
 
 ### Sensitive operation authorization
 

@@ -1,7 +1,7 @@
 // ── Dashboard Screen ────────────────────────────────────────────────
 // Main screen after wallet is unlocked. Shows balance, address, history.
 
-import { formatUsdcFromString } from '../../shared/format.js';
+import { formatUsdcFromString, formatRelativeTime } from '../../shared/format.js';
 
 export function renderDashboard(
   container: HTMLElement,
@@ -266,17 +266,3 @@ export function renderDashboard(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
-
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diffMs = now - timestamp;
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSeconds < 60) return 'just now';
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}

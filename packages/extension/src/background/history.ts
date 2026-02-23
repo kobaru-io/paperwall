@@ -18,8 +18,10 @@ export interface PaymentRecord {
   from: string;
   to: string;
   txHash: string;
-  status: 'confirmed';
+  status: 'pending' | 'confirmed' | 'failed';
   timestamp: number;
+  settledAt?: number;
+  error?: string;
 }
 
 // ── Public API ───────────────────────────────────────────────────
@@ -34,6 +36,26 @@ export async function addPayment(record: PaymentRecord): Promise<void> {
 
   // Prepend (most recent first) and cap
   const updated = [record, ...existing].slice(0, MAX_RECORDS);
+
+  await chrome.storage.local.set({ [STORAGE_KEY]: updated });
+}
+
+/**
+ * Updates the status of a payment record by requestId.
+ */
+export async function updatePaymentStatus(
+  requestId: string,
+  status: 'confirmed' | 'failed',
+  fields: { txHash?: string; settledAt?: number; error?: string },
+): Promise<void> {
+  const data = await chrome.storage.local.get(STORAGE_KEY);
+  const records = (data[STORAGE_KEY] as PaymentRecord[] | undefined) ?? [];
+
+  const updated = records.map((record) =>
+    record.requestId === requestId
+      ? { ...record, status, ...fields }
+      : record,
+  );
 
   await chrome.storage.local.set({ [STORAGE_KEY]: updated });
 }

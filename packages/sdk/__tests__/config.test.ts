@@ -138,6 +138,22 @@ describe('parseConfig', () => {
     expect(config.onPaymentSuccess).toBe(onSuccess);
     expect(config.onPaymentError).toBe(onError);
   });
+
+  it('should pass through optimistic field', () => {
+    const config = parseConfig({ ...VALID_CONFIG, optimistic: false });
+    expect(config.optimistic).toBe(false);
+  });
+
+  it('should default optimistic to undefined when not provided', () => {
+    const config = parseConfig(VALID_CONFIG);
+    expect(config.optimistic).toBeUndefined();
+  });
+
+  it('should pass through onOptimisticAccess callback', () => {
+    const cb = () => {};
+    const config = parseConfig({ ...VALID_CONFIG, onOptimisticAccess: cb });
+    expect(config.onOptimisticAccess).toBe(cb);
+  });
 });
 
 describe('parseScriptTag', () => {

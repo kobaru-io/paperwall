@@ -78,6 +78,7 @@ vi.mock('../src/background/payment-client.js', () => ({
 vi.mock('../src/background/history.js', () => ({
   addPayment: vi.fn(),
   getHistory: vi.fn(),
+  updatePaymentStatus: vi.fn(),
 }));
 
 import { handleMessage } from '../src/background/message-router.js';
@@ -115,6 +116,7 @@ async function setupPaymentPage(): Promise<void> {
     price: '10000',
     network: 'eip155:324705682',
     mode: 'client',
+    optimistic: 'false',
     signal: {
       x402Version: 2,
       resource: { url: 'https://example.com/article' },

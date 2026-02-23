@@ -31,6 +31,8 @@ export interface DetectedPage {
   mode: string;
   /** Optional site key from data-site-key attribute. */
   siteKey?: string;
+  /** Whether optimistic delivery is enabled (defaults to 'true'). */
+  optimistic: string;
 }
 
 /**
@@ -94,8 +96,9 @@ function parseMetaTag(meta: HTMLMetaElement): DetectedPage | null {
       meta.getAttribute('data-facilitator-url') ?? '';
     const mode = meta.getAttribute('data-mode') ?? 'client';
     const siteKey = meta.getAttribute('data-site-key') ?? undefined;
+    const optimistic = meta.getAttribute('data-optimistic') ?? 'true';
 
-    return { signal, facilitatorUrl, mode, siteKey };
+    return { signal, facilitatorUrl, mode, siteKey, optimistic };
   } catch {
     // Malformed base64 or invalid JSON
     return null;

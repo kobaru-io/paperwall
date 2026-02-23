@@ -105,7 +105,7 @@ describe('EXPORT_PRIVATE_KEY handler', () => {
     await createTestWallet('correct-password');
     const res = await send({ type: 'EXPORT_PRIVATE_KEY', password: 'wrong-password' });
     expect(res.success).toBe(false);
-    expect(res.error).toBe('Wrong password');
+    expect(res.error).toContain('Wrong password');
   });
 
   it('accepts request from alternative extension page', async () => {

@@ -15,7 +15,10 @@ vi.mock('../../budget.js', () => ({
     const n = BigInt(v);
     const whole = n / 1000000n;
     const frac = n % 1000000n;
-    return `${whole}.${frac.toString().padStart(6, '0').slice(0, 2)}`;
+    const full = frac.toString().padStart(6, '0');
+    const trimmed = full.replace(/0+$/, '');
+    const dec = trimmed.length < 2 ? full.slice(0, 2) : trimmed;
+    return `${whole}.${dec}`;
   }),
 }));
 
