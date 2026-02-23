@@ -58,7 +58,7 @@ graph LR
 
 **Service Worker** (background.js): The core of the extension. Manages the encrypted wallet, handles message routing, creates signed payment payloads via the x402 library (`@x402/evm`), communicates with the facilitator service, and tracks payment history.
 
-**Popup UI**: Renders screens based on wallet state -- setup (create wallet), unlock (enter password), dashboard (balance, address, history), and payment prompt (approve/reject).
+**Popup UI**: Renders screens based on wallet state -- setup (create wallet), unlock (enter password), or the main tabbed shell. The tabbed shell has four tabs: Home (dashboard with balance, address, recent history), History (full payment list with domain filter and date buckets), Stats (spending charts and top sites), and Settings (export/import key, create new wallet, about). A payment prompt (approve/reject) takes priority over the tabs when a payment signal is detected. An "Open in Tab" button lets you expand the popup into a full browser tab.
 
 **Facilitator Service**: External service at `https://gateway.kobaru.io`. Provides EIP-712 domain info (`/supported`), verifies signatures (`/verify`), and submits on-chain transactions (`/settle`). Not part of this repo.
 
@@ -108,13 +108,19 @@ paperwall/
           bridge.ts         # postMessage <-> chrome.runtime bridge
         popup/              # Extension popup UI
           index.html        # Popup HTML shell
-          index.ts          # Popup router (setup/unlock/dashboard/payment)
+          index.ts          # Popup router + tabbed shell (renderMainShell, switchTab)
           styles.css         # Popup styles
+          history-cache.ts  # Singleton cache for history records (shared by History + Stats)
+          components/
+            tab-bar.ts      # Tab bar with Home/History/Stats/Settings + Open in Tab
           screens/
             setup.ts        # Wallet creation screen
             unlock.ts       # Password entry screen
-            dashboard.ts    # Balance, address, history display
+            dashboard.ts    # Home tab: balance, address, recent history
             payment.ts      # Payment approval/rejection screen
+            history-full.ts # History tab: domain filter, date buckets, expandable rows
+            stats.ts        # Stats tab: time range selector, sparkline, top sites, bar chart
+            settings.ts     # Settings tab: export/import key, create wallet, about
         shared/             # Shared between background, content, popup
           constants.ts      # Network configs (SKALE testnet/mainnet)
           format.ts         # USDC formatting (smallest unit -> human-readable)
@@ -584,7 +590,9 @@ All packages use **Vitest**. Tests are co-located with source files (agent) or i
 - `signal.test.ts` -- Meta tag emission and removal
 - `badge.test.ts` -- Badge DOM insertion and removal
 
-**Extension tests** (`packages/extension/__tests__/`):
+**Extension tests** -- 174 tests across 17 files:
+
+Background tests (`packages/extension/__tests__/`):
 - `message-router.test.ts` -- All message types, auth checks, error paths
 - `payment-flow.test.ts` -- Full payment orchestration
 - `key-manager.test.ts` -- Key generation, encryption, decryption
@@ -594,6 +602,61 @@ All packages use **Vitest**. Tests are co-located with source files (agent) or i
 - `bridge.test.ts` -- Content script bridge behavior
 - `detector.test.ts` -- Meta tag scanning and observation
 - `history.test.ts` -- Payment history storage
+- `x402-compliance.test.ts` -- x402 protocol compliance
+- `placeholder.test.ts` -- Placeholder tests
+
+Background tests (`packages/extension/src/background/__tests__/`):
+- `export-import.test.ts` -- EXPORT_PRIVATE_KEY and IMPORT_PRIVATE_KEY message handlers (17 tests). Covers sender origin validation, password validation, no-wallet errors, correct/wrong password, key format validation (hex chars, length), import with/without 0x prefix, session key cleared after import, overwriting existing wallet
+
+Popup tests (`packages/extension/src/popup/__tests__/`):
+- `history-cache.test.ts` -- Singleton history cache with pending-promise deduplication (7 tests). Covers first call sends GET_HISTORY, cached second call, failure returns empty array, re-fetch after clearHistoryCache(), concurrent callers share single in-flight request, sendMessage throws returns empty array
+- `settings.test.ts` -- DOM tests for the settings screen (10 tests). Covers address truncation, button rendering, export three-step flow (warning, password input, key reveal), import destructive gate (disabled button, checkbox enable, password mismatch error), about section version
+- `stats-aggregations.test.ts` -- Pure function tests for stats helpers (11 tests). Covers filterByDays, sumAmountFormatted, topSites, groupByMonth, groupByDay (bucket count, accumulation, window exclusion)
+- `history-full.test.ts` -- Full history screen rendering
+- `tab-bar.test.ts` -- Tab bar component behavior
+
+### Extension testing patterns
+
+**Realistic Chrome storage mock.** The export-import tests use a `createStorageMock()` helper that simulates `chrome.storage.local` and `chrome.storage.session` with an in-memory store. This avoids brittle `mockResolvedValue` chains and lets tests exercise the actual read-after-write behavior of the message handlers:
+
+```typescript
+function createStorageMock() {
+  let store: Record<string, unknown> = {};
+  return {
+    get: vi.fn(async (keys?: string | string[] | null) => {
+      if (!keys || keys === null) return { ...store };
+      if (typeof keys === 'string') return keys in store ? { [keys]: store[keys] } : {};
+      const result: Record<string, unknown> = {};
+      for (const k of keys) { if (k in store) result[k] = store[k]; }
+      return result;
+    }),
+    set: vi.fn(async (items: Record<string, unknown>) => { Object.assign(store, items); }),
+    _getStore: () => store,
+    _reset: () => { store = {}; },
+  };
+}
+```
+
+Use `_reset()` in `beforeEach` to clear state between tests. Use `_getStore()` to assert on stored values without going through the mock.
+
+**Module isolation with `vi.resetModules()`.** The history-cache tests need a fresh module instance per test because the cache is a module-level singleton. Calling `vi.resetModules()` in `beforeEach` clears the module registry, and each test dynamically imports the module to get a clean cache:
+
+```typescript
+beforeEach(() => {
+  vi.resetModules();
+  (global as any).chrome = { /* ... full mock ... */ };
+});
+
+it('returns cached result without re-sending on second call', async () => {
+  const { loadHistoryCache, clearHistoryCache } = await import('../history-cache.js');
+  clearHistoryCache();
+  // ...test logic...
+});
+```
+
+This pattern is necessary for any module that holds singleton state. Without `vi.resetModules()`, the cached promise from a previous test leaks into the next one.
+
+**DOM tests with jsdom.** The settings and stats-aggregations tests use the `// @vitest-environment jsdom` pragma at the top of the file. This gives tests access to `document`, DOM APIs, and event dispatch without a browser. Tests create a container element, call the render function, and assert on the resulting DOM structure.
 
 **Agent tests** (`packages/agent/src/*.test.ts`):
 - `cli.test.ts` -- CLI command parsing and output
@@ -701,6 +764,47 @@ if (!sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`)) {
 ```
 
 Content scripts and web pages cannot invoke these operations directly.
+
+### Wallet management messages
+
+The Settings tab uses two additional message types to manage private keys:
+
+**`EXPORT_PRIVATE_KEY`** -- Decrypts and returns the private key.
+
+```typescript
+// Request
+{ type: 'EXPORT_PRIVATE_KEY', password: string }
+
+// Response (success)
+{ success: true, privateKey: string }
+
+// Response (failure)
+{ success: false, error: string }
+```
+
+**`IMPORT_PRIVATE_KEY`** -- Replaces the current wallet with an imported key. The key is encrypted with the provided password. After import, the wallet is locked and requires unlock.
+
+```typescript
+// Request
+{ type: 'IMPORT_PRIVATE_KEY', privateKey: string, password: string }
+
+// Response (success)
+{ success: true, address: string }
+
+// Response (failure)
+{ success: false, error: string }
+```
+
+Both message types are restricted to extension-origin senders (popup and options pages only).
+
+### Popup tab shell architecture
+
+The popup uses a tab-based shell rendered by `renderMainShell()` in `popup/index.ts`. Key implementation details:
+
+- **`renderMainShell(app, address, initialTab)`** -- Builds the tab bar and content area. Restores the last active tab from `chrome.storage.session` so tab state persists across popup open/close cycles.
+- **`switchTab(tab)`** -- Clears the content area and renders the selected tab's screen. Saves the active tab to session storage.
+- **`history-cache.ts`** -- A singleton that loads payment history once and shares it between the History and Stats tabs. Call `loadHistoryCache()` to populate and `clearHistoryCache()` to invalidate (for example, after wallet creation or import).
+- **Open in Tab** -- The tab bar includes an arrow button that calls `chrome.tabs.create()` with the popup URL and a `#tab=<name>` hash. The popup router reads this hash on init to restore the correct tab.
 
 ### USDC amount formatting
 

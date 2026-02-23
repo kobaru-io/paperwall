@@ -516,6 +516,65 @@ function setBadgeError(tabId: number): void {
 // Formatting functions moved to shared/format.ts
 const formatAmount = formatUsdcFromString;
 
+async function handleExportPrivateKey(password: string): Promise<MessageResponse> {
+  const data = await chrome.storage.local.get('wallet');
+  const wallet = data['wallet'] as WalletData | undefined;
+
+  if (!wallet) {
+    return { success: false, error: 'No wallet found' };
+  }
+
+  try {
+    const privateKey = await decryptKey(
+      password,
+      wallet.encryptedKey,
+      wallet.keySalt,
+      wallet.keyIv,
+    );
+    return { success: true, privateKey };
+  } catch {
+    return { success: false, error: 'Wrong password' };
+  }
+}
+
+async function handleImportPrivateKey(
+  rawKey: string,
+  password: string,
+): Promise<MessageResponse> {
+  // Normalize: strip 0x prefix
+  const normalized = rawKey.startsWith('0x') ? rawKey.slice(2) : rawKey;
+
+  // Validate: must be 64 hex chars
+  if (!/^[0-9a-fA-F]{64}$/.test(normalized)) {
+    return { success: false, error: 'Invalid private key format' };
+  }
+
+  // Validate: derive address (throws if scalar out of range)
+  let address: string;
+  try {
+    const { privateKeyToAddress } = await import('viem/accounts');
+    address = privateKeyToAddress(`0x${normalized}`);
+  } catch {
+    return { success: false, error: 'Invalid private key value' };
+  }
+
+  try {
+    const encrypted = await encryptKey(password, `0x${normalized}`);
+    const walletData: WalletData = {
+      address,
+      encryptedKey: encrypted.encryptedKey,
+      keySalt: encrypted.keySalt,
+      keyIv: encrypted.keyIv,
+    };
+    await chrome.storage.local.set({ wallet: walletData });
+    // Force re-lock: clear the session-cached private key
+    await chrome.storage.session.set({ privateKey: null });
+    return { success: true, address };
+  } catch {
+    return { success: false, error: 'Encryption failed' };
+  }
+}
+
 // ── Router ──────────────────────────────────────────────────────────
 
 export function handleMessage(
@@ -526,7 +585,7 @@ export function handleMessage(
   const type = message['type'] as string | undefined;
 
   // Sensitive operations: only allow from extension pages (popup, options)
-  const sensitiveTypes = ['CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE', 'GET_HISTORY'];
+  const sensitiveTypes = ['CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE', 'GET_HISTORY', 'EXPORT_PRIVATE_KEY', 'IMPORT_PRIVATE_KEY'];
   if (sensitiveTypes.includes(type ?? '')) {
     // sender.url starts with chrome-extension:// for extension pages
     if (!sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`)) {
@@ -568,6 +627,21 @@ export function handleMessage(
       }
       case 'GET_HISTORY':
         return handleGetHistory(message);
+      case 'EXPORT_PRIVATE_KEY': {
+        const password = message['password'];
+        if (typeof password !== 'string' || password.length === 0) {
+          return { success: false, error: 'Invalid password' };
+        }
+        return handleExportPrivateKey(password);
+      }
+      case 'IMPORT_PRIVATE_KEY': {
+        const privateKey = message['privateKey'];
+        const password = message['password'];
+        if (typeof privateKey !== 'string' || typeof password !== 'string' || password.length === 0) {
+          return { success: false, error: 'Invalid parameters' };
+        }
+        return handleImportPrivateKey(privateKey, password);
+      }
       case 'SIGN_ONLY':
         return { success: false, error: 'SIGN_ONLY not yet implemented (Tier 3)' };
       default:

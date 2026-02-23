@@ -6,6 +6,7 @@ import { formatUsdcFromString } from '../../shared/format.js';
 export function renderDashboard(
   container: HTMLElement,
   address: string,
+  onViewAll?: () => void,
 ): void {
   container.innerHTML = '';
 
@@ -85,6 +86,15 @@ export function renderDashboard(
   const historyHeading = document.createElement('h2');
   historyHeading.className = 'section-heading';
   historyHeading.textContent = 'Last 5 Payments';
+
+  if (onViewAll) {
+    const viewAllLink = document.createElement('button');
+    viewAllLink.type = 'button';
+    viewAllLink.className = 'view-all-link';
+    viewAllLink.textContent = 'View all →';
+    viewAllLink.addEventListener('click', onViewAll);
+    historyHeading.appendChild(viewAllLink);
+  }
 
   const historyList = document.createElement('ul');
   historyList.className = 'history-list';

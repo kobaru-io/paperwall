@@ -162,18 +162,83 @@ To see how much money is left in your wallet:
 
 ---
 
-## Step 6: View your payment history
+## Step 6: Navigate the popup tabs
 
-To see what you have paid for:
+After you unlock your wallet, you see a tab bar at the top of the popup with four tabs: **Home**, **History**, **Stats**, and **Settings**. There is also a small **arrow button** in the top-right corner that opens the popup as a full browser tab for more screen space.
 
-1. Click the **Paperwall icon** in your toolbar
-2. Scroll down to the **"Recent Payments"** section
-3. Each entry shows:
-   - The **website** you paid
-   - The **amount** you paid
-   - **When** you paid (for example, "5m ago" or "2h ago")
+### Home tab
 
-If you haven't made any payments yet, you will see "No payments yet."
+The Home tab is your dashboard. It shows your balance, wallet address, and a summary of recent payments. If you have payment history, you will see a **"View all"** link in the history section that takes you to the full History tab.
+
+### History tab
+
+The History tab shows all of your payments, grouped by date: **Today**, **Yesterday**, **This Week**, and **Older**.
+
+- Use the **domain filter** at the top to show payments for a specific website only
+- Click any payment row to **expand it** and see details: the full URL, transaction hash, network, and asset
+
+### Stats tab
+
+The Stats tab shows your spending patterns over time.
+
+- Use the **time range selector** to switch between **7 days**, **15 days**, and **30 days**
+- At the top you see your **total spend** for the selected period, with a sparkline chart
+- Below that, your **top 5 sites** by spending amount
+- At the bottom, a **6-month bar chart** showing monthly spending trends
+
+### Settings tab
+
+The Settings tab lets you manage your wallet. See [Wallet management](#wallet-management) below for details on exporting, importing, and creating wallets.
+
+The About section at the bottom shows the extension version, a link to the GitHub repository, and the license.
+
+### Open in tab
+
+Click the **arrow button** at the top-right of the tab bar to open the popup as a full browser tab. This gives you more room to browse your history and stats. The current tab is preserved when you open in a new browser tab.
+
+---
+
+## Wallet management
+
+The Settings tab includes three wallet actions. These are powerful operations, so each one includes safety warnings.
+
+### Export your private key
+
+If you need to back up your private key or move it to another wallet:
+
+1. Go to the **Settings** tab
+2. Click **"Export Private Key"**
+3. Read the warning carefully -- this wallet is for micropayments only (max ~$50 USDC). Click **"I understand the risks -- Continue"**
+4. Enter your password and click **"Reveal Key"**
+5. Your private key appears on screen with a **"Copy to Clipboard"** button
+6. The key **automatically hides after 60 seconds** and the clipboard is cleared
+
+> **Warning:** Anyone with your private key can access your funds. Never share it. Never paste it into a website.
+
+### Import a private key
+
+If you have an existing private key from another wallet:
+
+1. Go to the **Settings** tab
+2. Click **"Import Private Key"**
+3. Read the warning: this extension supports only one wallet address. Importing a new key **permanently replaces** your current wallet
+4. Check the box confirming you understand, then click **"Proceed"**
+5. Enter your private key, choose a new password, confirm it, and click **"Import Wallet"**
+6. After import, you will be asked to unlock with your new password
+
+> **Warning:** If you have not exported your current private key first, your current wallet and any funds in it will be permanently lost.
+
+### Create a new wallet
+
+If you want to start fresh with a new wallet:
+
+1. Go to the **Settings** tab
+2. Click **"Create New Wallet"**
+3. Read the warning: this **permanently replaces** your current wallet
+4. Check the confirmation box and click **"Proceed"**
+5. Follow the wallet creation steps (choose a password, confirm it)
+
+> **Warning:** This is irreversible. Export your current private key first if you want to keep access to your current funds.
 
 ---
 
