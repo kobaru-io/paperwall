@@ -56,16 +56,10 @@ The Paperwall Agent CLI is a command-line tool that lets AI agents (and humans) 
 
 ## Installation
 
-### With npx (recommended, zero install)
-
-```bash
-npx @kobaru/paperwall --help
-```
-
 ### Global install
 
 ```bash
-npm install -g @kobaru/paperwall
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 paperwall --help
 ```
 
@@ -115,7 +109,7 @@ See the [A2A server guide](a2a-server-guide.md#docker-deployment) for full Docke
 Set up your wallet, configure a budget, and fetch your first article in under a minute:
 
 ```bash
-# 1. Create an encrypted wallet (machine-bound, no password needed)
+# 1. Create a wallet (setup wizard prompts for storage backend)
 paperwall wallet create
 
 # 2. Fund your wallet with USDC on SKALE testnet
@@ -233,27 +227,32 @@ paperwall wallet import --key 0x1234...abcd --mode env-injected
 ### Check balance
 
 ```bash
-paperwall wallet balance [--network <caip2>]
+paperwall wallet balance [--network <caip2>] [--json]
 ```
 
 Queries the blockchain for your current USDC balance.
 
 **Options:**
 - `--network <caip2>` -- Query a specific network (default: network from wallet creation)
+- `--json` -- Machine-readable JSON output (default is human-friendly text)
 
-**Output:**
+**Default output (human-friendly):**
+```
+1.00 USDC
+0xAbCd...1234
+SKALE Base Sepolia (eip155:324705682)
+```
+
+**JSON output (`--json` flag):**
 ```json
 {
   "ok": true,
   "address": "0xAbCd...1234",
-  "balance": "1000000",
   "balanceFormatted": "1.00",
   "asset": "USDC",
-  "network": "eip155:324705682"
+  "network": "SKALE Base Sepolia (eip155:324705682)"
 }
 ```
-
-The `balance` field is in smallest units (1 USDC = 1,000,000 smallest units). The `balanceFormatted` field is human-readable.
 
 ### Show address
 
@@ -636,7 +635,13 @@ Fund your wallet by sending USDC to your wallet address on the SKALE network.
 
 ### "Wallet already exists"
 
-The agent refuses to overwrite an existing wallet to prevent accidental loss of funds. To replace your wallet:
+When running `paperwall setup` and a wallet already exists, the wizard shows the existing wallet's address and storage backend, then skips wallet creation. To replace your wallet during setup, pass `--force`:
+
+```bash
+paperwall setup --force
+```
+
+Or replace it directly:
 
 ```bash
 paperwall wallet create --force

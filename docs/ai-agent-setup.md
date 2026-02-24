@@ -16,16 +16,10 @@ If your client supports MCP, see the **[MCP server guide](mcp-server-guide.md)**
 
 ## Quick setup (skill-based)
 
-**Try instantly with npx (zero install):**
+**Install globally:**
 
 ```bash
-npx @kobaru/paperwall --help
-```
-
-**Or install globally:**
-
-```bash
-npm install -g @kobaru/paperwall
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 ```
 
 **Full guided setup** (recommended -- walks you through wallet, budget, and AI client integration):
@@ -59,7 +53,11 @@ A wallet is required to make payments. The installer gives you three options:
 
 **Create a new wallet (recommended for most users)**
 
-Generates a fresh Ethereum keypair dedicated to micropayments. The private key is encrypted with machine-bound encryption (PBKDF2 600k iterations + AES-256-GCM, keyed to your hostname and user ID) and stored at `~/.paperwall/wallet.json`. No password is needed -- the wallet auto-decrypts on the same machine for the same user.
+Generates a fresh Ethereum keypair dedicated to micropayments. After choosing to create (or import) a wallet, the setup wizard asks **how the private key should be stored**:
+
+- **OS keychain (recommended when available)** -- Stores the key in macOS Keychain, GNOME Keyring, KDE Wallet, or Windows Credential Manager. The OS provides its own access control; no Paperwall password is needed.
+- **Machine-bound encryption (recommended when keychain unavailable)** -- Encrypts with PBKDF2 600k iterations + AES-256-GCM keyed to your hostname and user ID, stored at `~/.paperwall/wallet.json`. No password needed -- the wallet auto-decrypts on the same machine for the same user.
+- **Password encryption** -- Encrypts with AES-256-GCM using a password you choose. Portable across machines; requires entering the password at the start of each session.
 
 After creation, you need to fund the wallet by sending USDC to its address on the SKALE network:
 
@@ -70,7 +68,7 @@ paperwall wallet balance   # check balance after funding
 
 **Import an existing key (for users migrating from another machine)**
 
-If you already have a dedicated micropayment key, you can import it. The installer encrypts it with the same machine-bound encryption -- the plaintext key is not stored.
+If you already have a dedicated micropayment key, you can import it. The installer offers the same storage choice (keychain, machine-bound, or password) -- the plaintext key is not stored.
 
 > **Warning:** Never import your main wallet. The agent makes automated payments on your behalf -- AI assistants can trigger transactions without manual approval. Always use a dedicated wallet funded with only the amount you intend to spend (e.g., $5-$50 USDC).
 

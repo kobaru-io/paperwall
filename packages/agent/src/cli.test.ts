@@ -139,21 +139,19 @@ describe('CLI', () => {
   });
 
   describe('wallet balance', () => {
-    it('should output balance as JSON', async () => {
+    it('should output human-friendly balance by default', async () => {
       const logs: string[] = [];
       vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
         logs.push(String(args[0]));
       });
 
-      // Create wallet first
       const program1 = buildProgram();
       await program1.parseAsync(['node', 'test', 'wallet', 'create']);
       logs.length = 0;
 
-      // Mock RPC response
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x4c4b40' }), // 5000000 = 5 USDC
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x4c4b40' }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         ),
       );
@@ -161,16 +159,40 @@ describe('CLI', () => {
       const program2 = buildProgram();
       await program2.parseAsync(['node', 'test', 'wallet', 'balance']);
 
+      expect(logs.some(l => l.includes('Balance:') && l.includes('5.00 USDC'))).toBe(true);
+      expect(logs.some(l => l.includes('Network:') && l.includes('SKALE Base Sepolia'))).toBe(true);
+    });
+
+    it('should output JSON with --json flag', async () => {
+      const logs: string[] = [];
+      vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+        logs.push(String(args[0]));
+      });
+
+      const program1 = buildProgram();
+      await program1.parseAsync(['node', 'test', 'wallet', 'create']);
+      logs.length = 0;
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x4c4b40' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+      const program2 = buildProgram();
+      await program2.parseAsync(['node', 'test', 'wallet', 'balance', '--json']);
+
       const output = JSON.parse(logs[0] as string) as {
         ok: boolean;
-        balance: string;
         balanceFormatted: string;
         asset: string;
+        network: string;
       };
       expect(output.ok).toBe(true);
-      expect(output.balance).toBe('5000000');
       expect(output.balanceFormatted).toBe('5.00');
       expect(output.asset).toBe('USDC');
+      expect(output.network).toBe('SKALE Base Sepolia (eip155:324705682)');
     });
   });
 

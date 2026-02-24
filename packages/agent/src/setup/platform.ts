@@ -17,6 +17,8 @@ export interface ConfigPaths {
   readonly codex: string;
   readonly codexAgentsMd: string;
   readonly openCode: string;
+  readonly cursorRules: string;
+  readonly windsurfRules: string;
   readonly claudeDesktop: string;
   readonly geminiCli: string;
   readonly geminiMd: string;
@@ -73,6 +75,8 @@ export function getConfigPaths(): ConfigPaths {
     openCode: isWin
       ? join(appData, 'opencode', 'opencode.json')
       : join(home, '.config', 'opencode', 'opencode.json'),
+    cursorRules: join(home, '.cursor', 'rules', 'paperwall.mdc'),
+    windsurfRules: join(home, '.windsurf', 'rules', 'paperwall.md'),
     claudeDesktop: join(appData, 'Claude', 'claude_desktop_config.json'),
     geminiCli: join(home, '.gemini', 'settings.json'),
     geminiMd: join(home, '.gemini', 'GEMINI.md'),

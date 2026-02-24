@@ -16,6 +16,13 @@ vi.mock('./wallet.js', () => ({
   getKeyStorage: vi.fn().mockReturnValue('file'),
 }));
 
+vi.mock('./keychain.js', () => ({
+  detectKeychainAvailability: () => Promise.resolve({ available: false }),
+  resetKeychainAvailabilityCache: () => {},
+  resetKeychainAdapterCache: () => {},
+  loadKeychainAdapter: () => Promise.resolve(null),
+}));
+
 vi.mock('./budget.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./budget.js')>();
   return {
@@ -268,7 +275,12 @@ describe('setup', () => {
 
       const paperwallDir = path.join(tmpDir, '.paperwall');
       fs.mkdirSync(paperwallDir, { recursive: true });
-      fs.writeFileSync(path.join(paperwallDir, 'wallet.json'), '{}');
+      fs.writeFileSync(path.join(paperwallDir, 'wallet.json'), JSON.stringify({
+        address: '0x1234567890abcdef1234567890abcdef12345678',
+        encryptedKey: 'test',
+        iv: 'test',
+        salt: 'test',
+      }));
 
       const { runSetup } = await import('./setup.js');
       await runSetup({ skipAi: true });
@@ -279,6 +291,7 @@ describe('setup', () => {
     it('should create wallet when user chooses create', async () => {
       const select = (await import('@inquirer/select')).default as ReturnType<typeof vi.fn>;
       select.mockResolvedValueOnce('create');
+      select.mockResolvedValueOnce('machine-bound'); // storage choice
 
       const confirmFn = (await import('@inquirer/confirm')).default as ReturnType<typeof vi.fn>;
       confirmFn.mockResolvedValueOnce(false);
@@ -293,12 +306,13 @@ describe('setup', () => {
       const { runSetup } = await import('./setup.js');
       await runSetup({ skipAi: true });
 
-      expect(createWallet).toHaveBeenCalledWith({});
+      expect(createWallet).toHaveBeenCalledWith({ force: undefined, keychain: false, mode: 'machine-bound', modeInput: undefined });
     });
 
     it('should import wallet when user confirms risks', async () => {
       const select = (await import('@inquirer/select')).default as ReturnType<typeof vi.fn>;
       select.mockResolvedValueOnce('import');
+      select.mockResolvedValueOnce('machine-bound'); // storage choice
 
       const confirmFn = (await import('@inquirer/confirm')).default as ReturnType<typeof vi.fn>;
       confirmFn.mockResolvedValueOnce(true);
@@ -319,7 +333,7 @@ describe('setup', () => {
 
       expect(importWallet).toHaveBeenCalledWith(
         '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
-        {},
+        { force: undefined, keychain: false, mode: 'machine-bound', modeInput: undefined },
       );
     });
 
@@ -341,6 +355,7 @@ describe('setup', () => {
     it('should force wallet setup even when wallet exists', async () => {
       const select = (await import('@inquirer/select')).default as ReturnType<typeof vi.fn>;
       select.mockResolvedValueOnce('create');
+      select.mockResolvedValueOnce('machine-bound');
 
       const confirmFn = (await import('@inquirer/confirm')).default as ReturnType<typeof vi.fn>;
       confirmFn.mockResolvedValueOnce(false);

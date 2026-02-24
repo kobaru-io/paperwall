@@ -187,14 +187,8 @@ This installs dependencies for all three packages using npm workspaces.
 **For agent CLI only** (if you just need to use the CLI, not develop on it):
 
 ```bash
-npm install -g @kobaru/paperwall
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 paperwall --help
-```
-
-Or try it without installing:
-
-```bash
-npx @kobaru/paperwall --help
 ```
 
 ### Building
@@ -295,7 +289,7 @@ Test headless payments with the agent CLI tool.
 **1. Create a wallet (one-time setup):**
 
 ```bash
-paperwall wallet create
+paperwall wallet create   # prompts for storage backend (keychain / machine-bound / password)
 ```
 
 **2. Set budget limits:**

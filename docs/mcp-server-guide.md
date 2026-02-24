@@ -83,7 +83,7 @@ Paperwall supports two integration methods. MCP is recommended when your client 
 **Install from npm (recommended):**
 
 ```bash
-npm install -g @kobaru/paperwall
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 ```
 
 After installing, the CLI is available as `paperwall`. You can verify with `paperwall --help`.
@@ -105,7 +105,13 @@ After building, the CLI is at `packages/agent/dist/cli.js`.
 node packages/agent/dist/cli.js wallet create
 ```
 
-This generates a fresh keypair, encrypts it with machine-bound encryption (PBKDF2 + AES-256-GCM keyed to hostname and user ID), and stores it at `~/.paperwall/wallet.json`. No password needed -- the wallet auto-decrypts on the same machine.
+This generates a fresh keypair. The CLI prompts you to choose how the private key should be stored:
+
+- **OS keychain (recommended when available)** -- macOS Keychain, GNOME Keyring, KDE Wallet, or Windows Credential Manager
+- **Machine-bound encryption (recommended when keychain unavailable)** -- AES-256-GCM keyed to hostname and user ID; auto-decrypts on the same machine, no password needed
+- **Password encryption** -- AES-256-GCM with a user-chosen password; portable across machines
+
+The key is stored at `~/.paperwall/wallet.json` (encrypted file modes) or in the OS credential store (keychain mode).
 
 Fund the wallet by sending USDC to its address on the SKALE network:
 
@@ -575,7 +581,7 @@ The command validates that a wallet exists before starting. If no wallet is foun
 Install the CLI and run the interactive setup wizard:
 
 ```bash
-npm install -g @kobaru/paperwall
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 paperwall setup
 ```
 
@@ -583,8 +589,8 @@ The setup wizard prompts you to choose your AI client (Claude Code, Cursor, Wind
 
 The wizard:
 1. Writes the MCP config to the appropriate file for your client
-2. Adds Paperwall instructions to your client's global instructions file (Claude Code: `~/.claude/CLAUDE.md`, Codex: `~/.codex/AGENTS.md`, Gemini CLI / Antigravity: `~/.gemini/GEMINI.md`). This tells the AI assistant to prefer Paperwall's `fetch_url` tool over any built-in web fetch when accessing URLs.
-3. Walks you through wallet creation (encrypted, no password)
+2. Adds Paperwall instructions to your client's global instructions file (Claude Code: `~/.claude/CLAUDE.md`, Cursor: `~/.cursor/rules/paperwall.mdc`, Windsurf: `~/.windsurf/rules/paperwall.md`, Codex: `~/.codex/AGENTS.md`, Gemini CLI / Antigravity: `~/.gemini/GEMINI.md`). This tells the AI assistant to prefer Paperwall's `fetch_url` tool over any built-in web fetch when accessing URLs.
+3. Walks you through wallet creation, prompting you to choose a storage backend (OS keychain, machine-bound encryption, or password encryption)
 4. Prompts for spending limits (per-request, daily, total)
 
 For clients with existing config files, the wizard merges the Paperwall entry into the existing JSON config or appends the TOML block (Codex).

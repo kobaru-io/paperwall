@@ -137,13 +137,7 @@ Choose your deployment method based on your needs.
 **Install from npm (recommended):**
 
 ```bash
-npm install -g @kobaru/paperwall
-```
-
-Or use npx for zero-install usage:
-
-```bash
-npx @kobaru/paperwall --help
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 ```
 
 **From source:**

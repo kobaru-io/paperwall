@@ -10,7 +10,7 @@ This document explains the **why** behind Paperwall's architecture. For the tech
 4. [Why Not Start with Tier 3 Only?](#why-not-start-with-tier-3-only)
 5. [Extension Works in All Modes](#extension-works-in-all-modes)
 6. [Browser Extension: Intentionally a Pseudo-Wallet](#browser-extension-intentionally-a-pseudo-wallet)
-7. [Agent: Machine-Bound Wallet Encryption](#agent-machine-bound-wallet-encryption)
+7. [Agent: Wallet Encryption and Storage](#agent-wallet-encryption-and-storage)
 8. [Optimistic Settlement: Default-On for Tier 1 & 2](#optimistic-settlement-default-on-for-tier-1--2)
 9. [Other Design Decisions](#other-design-decisions)
 
@@ -302,11 +302,11 @@ The agent supports three encryption modes and two storage backends, each designe
 
 | Mode | Key derivation | Use case |
 |------|---------------|----------|
-| **Machine-bound** (default) | PBKDF2(hostname + uid + salt) | Local development, stable machines |
-| **Password** | PBKDF2(user password + random salt) | MCP CLI, interactive terminals |
+| **Machine-bound** | PBKDF2(hostname + uid + salt) | Local development, stable machines, no keychain available |
+| **Password** | PBKDF2(user password + random salt) | MCP CLI, interactive terminals, portable wallets |
 | **Environment-injected** | Base64-decoded `PAPERWALL_WALLET_KEY` | Containers, K8s, CI/CD |
 
-**Why machine-bound as default:** The agent is called by AI coding assistants as a subprocess -- no TTY, no human. Setting PAPERWALL_PASSWORD in .bashrc is plaintext next to the encrypted file. Machine-bound encryption provides equivalent protection with zero friction.
+**Recommended defaults for file-based storage:** The `paperwall setup` wizard offers a choice. Machine-bound is the recommended fallback when an OS keychain is unavailable (no TTY, no human -- setting PAPERWALL_PASSWORD in .bashrc would be plaintext next to the encrypted file, so machine-bound encryption provides equivalent protection with zero friction). Password mode is best for interactive MCP usage (Claude Code, Cursor) where portability and explicit user intent matter.
 
 **Why password mode:** MCP usage (Claude Code, Cursor) is interactive, so password prompts are acceptable. Password mode makes the wallet portable across machines and gives explicit user control.
 
@@ -314,7 +314,7 @@ The agent supports three encryption modes and two storage backends, each designe
 
 ### OS keychain storage
 
-As an alternative to encrypted files, the agent can store private keys in the OS native credential manager (macOS Keychain, GNOME Keyring, Windows Credential Manager) via the `@napi-rs/keyring` optional dependency.
+The agent can store private keys in the OS native credential manager (macOS Keychain, GNOME Keyring, Windows Credential Manager) via the `@napi-rs/keyring` optional dependency. The `paperwall setup` wizard presents this as the **recommended** option when the keychain is available, with machine-bound encryption as the recommended fallback for headless or containerized environments.
 
 **Why a separate storage backend (not an encryption mode):** The keychain is a WHERE (storage location), not a HOW (encryption method). The OS keychain provides its own protection -- adding PBKDF2 encryption on top would be redundant. This distinction keeps the `EncryptionMode` interface clean: encryption modes define key derivation for file-based storage, while keychain is an orthogonal storage choice.
 

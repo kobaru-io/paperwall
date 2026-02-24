@@ -6,6 +6,7 @@ import { setBudget, getBudget, smallestToUsdc, usdcToSmallest } from './budget.j
 import { getRecent, getSpendingTotals } from './history.js';
 import { readJsonFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
+import { getNetwork } from './networks.js';
 import { fetchWithPayment, flushPendingSettlements } from './payment-engine.js';
 
 import type { WalletFile } from './wallet.js';
@@ -93,17 +94,26 @@ export function buildProgram(): Command {
     .command('balance')
     .description('Show USDC balance')
     .option('-n, --network <caip2>', 'Query specific network')
-    .action(async (options: { network?: string }) => {
+    .option('--json', 'Output as JSON')
+    .action(async (options: { network?: string; json?: boolean }) => {
       try {
         const result = await getBalance(options.network);
-        outputJson({
-          ok: true,
-          address: result.address,
-          balance: result.balance,
-          balanceFormatted: result.balanceFormatted,
-          asset: result.asset,
-          network: result.network,
-        });
+        const networkConfig = getNetwork(result.network);
+        if (options.json) {
+          outputJson({
+            ok: true,
+            address: result.address,
+            balanceFormatted: result.balanceFormatted,
+            asset: result.asset,
+            network: `${networkConfig.name} (${result.network})`,
+          });
+        } else {
+          console.log('');
+          console.log(`  Balance:  ${result.balanceFormatted} ${result.asset}`);
+          console.log(`  Address:  ${result.address}`);
+          console.log(`  Network:  ${networkConfig.name} (${result.network})`);
+          console.log('');
+        }
       } catch (error: unknown) {
         handleError(error, 'balance_error', 1, true);
       }
@@ -124,7 +134,8 @@ export function buildProgram(): Command {
   wallet
     .command('info')
     .description('Show wallet storage and encryption info')
-    .action(async () => {
+    .option('--json', 'Output as JSON')
+    .action(async (options: { json?: boolean }) => {
       try {
         const walletFile = readJsonFile<WalletFile>('wallet.json');
         if (!walletFile) {
@@ -132,13 +143,26 @@ export function buildProgram(): Command {
           return;
         }
         const storage = getKeyStorage(walletFile);
-        outputJson({
-          ok: true,
-          address: walletFile.address,
-          network: walletFile.networkId,
-          keyStorage: storage,
-          encryptionMode: storage === 'keychain' ? null : (walletFile.encryptionMode ?? 'machine-bound'),
-        });
+        const encryptionMode = storage === 'keychain' ? null : (walletFile.encryptionMode ?? 'machine-bound');
+        const networkConfig = getNetwork(walletFile.networkId);
+        if (options.json) {
+          outputJson({
+            ok: true,
+            address: walletFile.address,
+            network: `${networkConfig.name} (${walletFile.networkId})`,
+            keyStorage: storage,
+            encryptionMode,
+          });
+        } else {
+          console.log('');
+          console.log(`  Address:     ${walletFile.address}`);
+          console.log(`  Network:     ${networkConfig.name} (${walletFile.networkId})`);
+          console.log(`  Key storage: ${storage === 'keychain' ? 'OS keychain' : 'encrypted file'}`);
+          if (encryptionMode) {
+            console.log(`  Encryption:  ${encryptionMode}`);
+          }
+          console.log('');
+        }
       } catch (error: unknown) {
         handleError(error, 'wallet_info_failed', 1);
       }

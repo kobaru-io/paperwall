@@ -4,6 +4,7 @@ import password from '@inquirer/password';
 import confirm from '@inquirer/confirm';
 import { existsSync } from 'node:fs';
 import { createWallet, importWallet, getKeyStorage } from './wallet.js';
+import { detectKeychainAvailability } from './keychain.js';
 import { setBudget, usdcToSmallest } from './budget.js';
 import { readJsonFile } from './storage.js';
 import { getConfigPaths, getMcpCommand } from './setup/platform.js';
@@ -89,9 +90,11 @@ async function setupAiClient(): Promise<void> {
       break;
     case 'cursor':
       writeMcpConfig(paths.cursor, mcpCommand);
+      writeInstructionsBlock(paths.cursorRules, 'paperwall.mdc');
       break;
     case 'windsurf':
       writeMcpConfig(paths.windsurf, mcpCommand);
+      writeInstructionsBlock(paths.windsurfRules, 'paperwall.md');
       break;
     case 'codex':
       writeCodexConfig(mcpCommand);
@@ -124,12 +127,61 @@ async function setupAiClient(): Promise<void> {
   }
 }
 
+// -- Wallet Storage Selection ---
+
+interface StorageChoice {
+  readonly keychain: boolean;
+  readonly mode?: 'machine-bound' | 'password';
+  readonly modeInput?: string;
+}
+
+async function chooseStorage(): Promise<StorageChoice> {
+  const keychainStatus = await detectKeychainAvailability();
+
+  interface StorageOption {
+    readonly name: string;
+    readonly value: string;
+    readonly description: string;
+  }
+
+  const choices: StorageOption[] = [];
+
+  if (keychainStatus.available) {
+    choices.push({ name: 'OS keychain (recommended)', value: 'keychain', description: 'macOS Keychain / GNOME Keyring / KDE Wallet / Windows Credential Manager' });
+  }
+
+  choices.push(
+    { name: keychainStatus.available ? 'Machine-bound encryption' : 'Machine-bound encryption (recommended)', value: 'machine-bound', description: 'AES-256-GCM keyed to this machine — no password needed' },
+    { name: 'Password encryption', value: 'password', description: 'AES-256-GCM with a password you choose' },
+  );
+
+  const storage = await select({
+    message: 'How should the private key be stored?',
+    choices,
+  });
+
+  if (storage === 'keychain') return { keychain: true };
+  if (storage === 'password') {
+    const pw = await password({ message: 'Encryption password:' });
+    if (!pw) throw new Error('Password is required for password-encrypted wallets.');
+    const pw2 = await password({ message: 'Confirm password:' });
+    if (pw !== pw2) throw new Error('Passwords do not match.');
+    return { keychain: false, mode: 'password', modeInput: pw };
+  }
+  return { keychain: false, mode: 'machine-bound' };
+}
+
 // -- Wallet Setup ---
 
 async function setupWallet(force?: boolean): Promise<void> {
   const paths = getConfigPaths();
   if (existsSync(paths.wallet) && !force) {
-    console.log(`  Wallet already configured at ${paths.wallet} — skipping.`);
+    const walletFile = readJsonFile<WalletFile>('wallet.json');
+    const addr = walletFile?.address ?? 'unknown';
+    const storage = walletFile ? getKeyStorage(walletFile) : 'file';
+    console.log(`  Wallet found: ${addr}`);
+    console.log(`    Storage: ${paths.wallet} (${storage})`);
+    console.log('    To recreate: paperwall setup --force');
     return;
   }
 
@@ -145,12 +197,12 @@ async function setupWallet(force?: boolean): Promise<void> {
 
   switch (choice) {
     case 'create': {
-      const result = await createWallet({});
+      const storage = await chooseStorage();
+      const result = await createWallet({ force, keychain: storage.keychain, mode: storage.mode, modeInput: storage.modeInput });
       const walletFile = readJsonFile<WalletFile>('wallet.json');
       const keyStorage = walletFile ? getKeyStorage(walletFile) : 'file';
       console.log(`  ✓ Wallet created: ${result.address}`);
-      console.log(`    Storage: ${paths.wallet} (${keyStorage})`);
-      console.log(`    Encryption: AES-256-GCM + PBKDF2 (600k iterations)`);
+      console.log(`    Storage: ${keyStorage}`);
       console.log('');
       console.log('  Fund it with USDC on SKALE network:');
       console.log('    paperwall wallet address   # get your address');
@@ -173,9 +225,12 @@ async function setupWallet(force?: boolean): Promise<void> {
         break;
       }
       const key = await password({ message: 'Private key (0x-prefixed hex):' });
-      const result = await importWallet(key, {});
+      const storage = await chooseStorage();
+      const result = await importWallet(key, { force, keychain: storage.keychain, mode: storage.mode, modeInput: storage.modeInput });
+      const walletFile = readJsonFile<WalletFile>('wallet.json');
+      const keyStorage = walletFile ? getKeyStorage(walletFile) : 'file';
       console.log(`  ✓ Wallet imported: ${result.address}`);
-      console.log(`    Storage: ${paths.wallet}`);
+      console.log(`    Storage: ${keyStorage}`);
       break;
     }
     case 'skip':

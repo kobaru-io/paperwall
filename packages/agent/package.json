@@ -1,6 +1,6 @@
 {
   "name": "@kobaru/paperwall",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Paperwall agent CLI and A2A server — x402 payment wallet for AI agents",
   "license": "GPL-3.0",
   "type": "module",

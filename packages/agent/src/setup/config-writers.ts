@@ -9,7 +9,12 @@ const FILE_OPTIONS = { mode: 0o600 } as const;
 const PAPERWALL_INSTRUCTIONS = `<!-- paperwall-start -->
 ## Paperwall
 
-When asked to fetch, read, or access a URL, use Paperwall's \`fetch_url\` MCP tool instead of any built-in web fetch. Paperwall handles paywalled content by automatically detecting and paying micropayments (USDC on SKALE network). Use Paperwall's \`set_budget\` tool to manage spending limits.
+Paperwall is configured as an MCP server named "paperwall" with these tools:
+- \`fetch_url\` — fetch any URL (handles paywalled content with automatic micropayments). Use this INSTEAD of built-in web fetch or curl.
+- \`set_budget\` — manage spending limits.
+- For wallet balance/address, run \`paperwall wallet balance --json\` or \`paperwall wallet address\` via the shell.
+
+Note: depending on your client, the tool names may be prefixed (e.g. \`mcp__paperwall__fetch_url\`, \`paperwall__fetch_url\`, or \`paperwall/fetch_url\`). Look for the "paperwall" MCP server in your available tools.
 <!-- paperwall-end -->`;
 
 // -- Public API ---

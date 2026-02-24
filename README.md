@@ -122,16 +122,10 @@ You want an ad-free web and don't mind paying a few cents per article—all in a
 
 You use Claude Code, Gemini CLI, Cursor, Antigravity, or another AI agent and want it to pay for paywalled articles on your behalf.
 
-**Try it instantly (zero install):**
-
-```bash
-npx @kobaru/paperwall --help
-```
-
 **Install and set up:**
 
 ```bash
-npm install -g @kobaru/paperwall
+npm install -g @kobaru/paperwall   # permission denied? use: sudo npm install -g @kobaru/paperwall
 paperwall setup
 ```
 
