@@ -5,14 +5,17 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# -- Next.js --
-website/.next/
-website/out/
-
 # -- Environment & secrets --
 .env
 .env.*
 !.env.test.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+wallet.json
+*.secret
 
 # -- Wallet & agent data --
 .paperwall/
@@ -30,6 +33,7 @@ test_output*.txt
 Thumbs.db
 .vscode/
 .idea/
+*.sublime-*
 
 # -- Docker --
 .dockerignore
@@ -46,7 +50,17 @@ docs/codereview/
 # -- Release archives --
 packages/extension/releases/
 
+# -- Chrome extension --
+packages/extension/*.zip
+packages/extension/*.crx
+
+# -- Next.js / website --
+website/.next/
+website/out/
+website/.vercel/
+
 # -- Misc --
 *.swp
 *.swo
 *~
+.turbo/
