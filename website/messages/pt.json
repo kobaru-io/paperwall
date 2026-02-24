@@ -75,9 +75,9 @@
     "pwModel": "Protocolo Paperwall",
     "pwPrice": "$0,00",
     "pwNote": "Gratuito. Para sempre.",
-    "publisherNote": "Publicadores ficam com 100% dos pagamentos por conteúdo. Sem taxas de plataforma, sem intermediários, sem lock-in. O processamento de pagamentos é feito por um facilitador (Kobaru por padrão) — facilitadores podem cobrar taxas de processamento dependendo do volume e plano. Você sempre pode operar o seu próprio.",
+    "publisherNote": "Editores ficam com 100% dos pagamentos por conteúdo. Sem taxas de plataforma, sem intermediários, sem lock-in. O processamento de pagamentos é feito por um facilitador (Kobaru por padrão) — facilitadores podem cobrar taxas de processamento dependendo do volume e plano. Você sempre pode operar o seu próprio.",
     "protocolNote": "O protocolo é gratuito e de código aberto. O SDK, a extensão, o CLI e o servidor A2A não custam nada para usar ou auto-hospedar.",
-    "readerNote": "Os leitores pagam apenas pelo conteúdo que leem — centavos que vão diretamente ao publicador. Sem comissão para o Paperwall."
+    "readerNote": "Os leitores pagam apenas pelo conteúdo que leem — centavos que vão diretamente ao editor. Sem comissão para o Paperwall."
   },
   "showcase": {
     "title": "Projetos em Destaque",
@@ -87,7 +87,7 @@
   },
   "kobaru": {
     "title": "Criado pela Kobaru",
-    "description": "A Kobaru desenvolve ferramentas de código aberto para uma web mais justa. Operamos uma implementação de referência do protocolo Paperwall — incluindo infraestrutura de processamento de pagamentos — para que os publicadores não precisem operar a própria.",
+    "description": "A Kobaru desenvolve ferramentas de código aberto para uma web mais justa. Operamos uma implementação de referência do protocolo Paperwall — incluindo infraestrutura de processamento de pagamentos — para que os editores não precisem operar a própria.",
     "cta": "Saiba mais sobre a Kobaru"
   },
   "faq": {
@@ -103,9 +103,9 @@
     "q5": "E os agentes de IA?",
     "a5": "Agentes de IA podem usar nossa ferramenta CLI para pagar e acessar conteúdo automaticamente. Perfeito para pesquisa, coleta de dados e fluxos automatizados.",
     "q6": "Preciso entender de criptomoedas?",
-    "a6": "Para leitores: estamos fazendo tudo o que podemos para abstrair a complexidade cripto e oferecer uma UX de ponta. Um dos nossos princípios fundamentais é o teste da vovó — a extensão deve ser tão fácil de usar que até a sua vovó consegue. Dito isso, o Paperwall está em fase inicial e os usuários precisarão carregar a conta manualmente. Vamos guiá-lo no processo com instruções simples e passo a passo. Para publicadores: o Kobaru abstrai tudo. Sem necessidade de conhecimento cripto — basta adicionar uma tag de script e pronto.",
+    "a6": "Para leitores: estamos fazendo tudo o que podemos para abstrair a complexidade cripto e oferecer uma UX de ponta. Um dos nossos princípios fundamentais é o teste da vovó — a extensão deve ser tão fácil de usar que até a sua vovó consegue. Dito isso, o Paperwall está em fase inicial e os usuários precisarão carregar a conta manualmente. Vamos guiá-lo no processo com instruções simples e passo a passo. Para editores: o Kobaru abstrai tudo. Sem necessidade de conhecimento cripto — basta adicionar uma tag de script e pronto.",
     "q7": "E se eu não gostar de um artigo que paguei?",
-    "a7": "A um centavo por artigo, o risco é mínimo. E estamos desenvolvendo listas de permissão e bloqueio — assim você poderá configurar pagamentos automáticos para os publicadores que confia e bloquear os que não confia, sem precisar pensar nisso.",
+    "a7": "A um centavo por artigo, o risco é mínimo. E estamos desenvolvendo listas de permissão e bloqueio — assim você poderá configurar pagamentos automáticos para os editores que confia e bloquear os que não confia, sem precisar pensar nisso.",
     "q8": "O Paperwall é de código aberto?",
     "a8": "Sim. Paperwall é um protocolo de código aberto sob GPL-3.0. Você pode inspecionar o código, contribuir, fazer um fork ou rodar sua própria instância completamente independente da Kobaru.",
     "q9": "Quais navegadores são suportados?",
@@ -141,7 +141,7 @@
     "stats3": "Auto-hospedável"
   },
   "setup": {
-    "pageTitle": "Configuração para publicadores",
+    "pageTitle": "Configuração para editores",
     "pageSubtitle": "Preencha seus dados e obtenha o código para adicionar o Paperwall a qualquer página. Leva menos de 60 segundos.",
     "backHome": "← Voltar ao início",
     "walletLabel": "Seu endereço de carteira",
@@ -151,7 +151,7 @@
     "walletOr": "ou",
     "walletError": "Deve ser um endereço EVM válido (0x seguido de 40 caracteres hexadecimais)",
     "priceLabel": "Preço por artigo",
-    "priceHint": "A maioria dos publicadores começa com $0,01. Um leitor com $5 pode ler 500 artigos.",
+    "priceHint": "A maioria dos editores começa com $0,01. Um leitor com $5 pode ler 500 artigos.",
     "priceCustom": "Personalizado",
     "priceMicroUnits": "micro-unidades",
     "modeLabel": "Modo de pagamento",
@@ -170,7 +170,7 @@
     "accessInstant": "⚡ Instantâneo (otimista)",
     "accessConfirmed": "✅ Após confirmação",
     "accessInstantHint": "O conteúdo é desbloqueado imediatamente após a aprovação do leitor. Recomendado para micropagamentos.",
-    "accessConfirmedWarningTitle": "⚠️ Não recomendado para a maioria dos publicadores.",
+    "accessConfirmedWarningTitle": "⚠️ Não recomendado para a maioria dos editores.",
     "accessConfirmedWarningBody": "Aguardar a confirmação da blockchain adiciona ~2 segundos de atraso após cada pagamento. Para micropagamentos, o acesso instantâneo é quase sempre a escolha certa.",
     "codeTitle": "Código gerado",
     "codeCopy": "Copiar",
@@ -180,7 +180,7 @@
     "nextStep1b": "",
     "nextStep2": "Abra sua página — você deve ver um pequeno badge do Paperwall",
     "nextStep3": "Instale a extensão para testar um pagamento",
-    "fullGuideLink": "Guia completo para publicadores ↗",
+    "fullGuideLink": "Guia completo para editores ↗",
     "platformsTitle": "Onde colar o código"
   },
   "terms": {

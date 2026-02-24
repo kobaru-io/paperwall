@@ -75,9 +75,9 @@
     "pwModel": "Protocolo Paperwall",
     "pwPrice": "$0.00",
     "pwNote": "Gratis. Siempre.",
-    "publisherNote": "Los publicadores se quedan con el 100% de los pagos por contenido. Sin tarifas de plataforma, sin intermediarios, sin dependencia. El procesamiento de pagos lo gestiona un facilitador (Kobaru por defecto) — los facilitadores pueden cobrar tarifas según el volumen y el plan. Siempre puedes operar el tuyo propio.",
+    "publisherNote": "Los editores se quedan con el 100% de los pagos por contenido. Sin tarifas de plataforma, sin intermediarios, sin dependencia. El procesamiento de pagos lo gestiona un facilitador (Kobaru por defecto) — los facilitadores pueden cobrar tarifas según el volumen y el plan. Siempre puedes operar el tuyo propio.",
     "protocolNote": "El protocolo es gratuito y de código abierto. El SDK, la extensión, el CLI y el servidor A2A no cuestan nada para usar o autoalojar.",
-    "readerNote": "Los lectores solo pagan por el contenido que leen — centavos que van directamente al publicador. Sin comisión para Paperwall."
+    "readerNote": "Los lectores solo pagan por el contenido que leen — centavos que van directamente al editor. Sin comisión para Paperwall."
   },
   "showcase": {
     "title": "Proyectos Destacados",
@@ -87,7 +87,7 @@
   },
   "kobaru": {
     "title": "Creado por Kobaru",
-    "description": "Kobaru construye herramientas de código abierto para una web más justa. Operamos una implementación de referencia del protocolo Paperwall — incluyendo infraestructura de procesamiento de pagos — para que los publicadores no necesiten operar la suya.",
+    "description": "Kobaru construye herramientas de código abierto para una web más justa. Operamos una implementación de referencia del protocolo Paperwall — incluyendo infraestructura de procesamiento de pagos — para que los editores no necesiten operar la suya.",
     "cta": "Conoce más sobre Kobaru"
   },
   "faq": {
@@ -103,9 +103,9 @@
     "q5": "¿Qué pasa con los agentes de IA?",
     "a5": "Los agentes de IA pueden usar nuestra herramienta CLI para pagar y acceder a contenido automáticamente. Perfecto para investigación, recopilación de datos y flujos automatizados.",
     "q6": "¿Necesito saber de criptomonedas?",
-    "a6": "Para lectores: hacemos todo lo posible para abstraer la complejidad cripto y ofrecer una experiencia de primer nivel. Uno de nuestros principios fundamentales es la prueba de la abuela — la extensión debe ser tan fácil de usar que hasta tu abuela pueda hacerlo. Dicho esto, Paperwall está en etapas tempranas y los usuarios deberán cargar su cuenta manualmente. Te guiaremos en el proceso con instrucciones simples y paso a paso. Para publicadores: Kobaru abstrae todo. Sin conocimientos cripto necesarios — solo agrega un script tag y listo.",
+    "a6": "Para lectores: hacemos todo lo posible para abstraer la complejidad cripto y ofrecer una experiencia de primer nivel. Uno de nuestros principios fundamentales es la prueba de la abuela — la extensión debe ser tan fácil de usar que hasta tu abuela pueda hacerlo. Dicho esto, Paperwall está en etapas tempranas y los usuarios deberán cargar su cuenta manualmente. Te guiaremos en el proceso con instrucciones simples y paso a paso. Para editores: Kobaru abstrae todo. Sin conocimientos cripto necesarios — solo agrega un script tag y listo.",
     "q7": "¿Qué pasa si no me gusta un artículo que pagué?",
-    "a7": "A un centavo por artículo, el riesgo es mínimo. Y actualmente estamos desarrollando listas de permitidos y bloqueados — así podrás configurar pagos automáticos para los publicadores que confías y bloquear los que no, sin tener que pensarlo.",
+    "a7": "A un centavo por artículo, el riesgo es mínimo. Y actualmente estamos desarrollando listas de permitidos y bloqueados — así podrás configurar pagos automáticos para los editores que confías y bloquear los que no, sin tener que pensarlo.",
     "q8": "¿Paperwall es de código abierto?",
     "a8": "Sí. Paperwall es un protocolo de código abierto bajo GPL-3.0. Puedes inspeccionar el código, contribuir, hacer un fork o ejecutar tu propia instancia completamente independiente de Kobaru.",
     "q9": "¿Qué navegadores son compatibles?",
@@ -141,7 +141,7 @@
     "stats3": "Autoalojable"
   },
   "setup": {
-    "pageTitle": "Configuración para publicadores",
+    "pageTitle": "Configuración para editores",
     "pageSubtitle": "Completa tus datos y obtén el código para agregar Paperwall a cualquier página. Tarda menos de 60 segundos.",
     "backHome": "← Volver al inicio",
     "walletLabel": "Tu dirección de billetera",
@@ -151,7 +151,7 @@
     "walletOr": "o",
     "walletError": "Debe ser una dirección EVM válida (0x seguido de 40 caracteres hexadecimales)",
     "priceLabel": "Precio por artículo",
-    "priceHint": "La mayoría de los publicadores empiezan con $0.01. Un lector con $5 puede leer 500 artículos.",
+    "priceHint": "La mayoría de los editores empiezan con $0.01. Un lector con $5 puede leer 500 artículos.",
     "priceCustom": "Personalizado",
     "priceMicroUnits": "micro-unidades",
     "modeLabel": "Modo de pago",
@@ -170,7 +170,7 @@
     "accessInstant": "⚡ Instantáneo (optimista)",
     "accessConfirmed": "✅ Tras confirmación",
     "accessInstantHint": "El contenido se desbloquea inmediatamente tras la aprobación del lector. Recomendado para micropagos.",
-    "accessConfirmedWarningTitle": "⚠️ No recomendado para la mayoría de los publicadores.",
+    "accessConfirmedWarningTitle": "⚠️ No recomendado para la mayoría de los editores.",
     "accessConfirmedWarningBody": "Esperar la confirmación de la blockchain agrega ~2 segundos de retraso tras cada pago. Para micropagos, el acceso instantáneo es casi siempre la mejor opción.",
     "codeTitle": "Código generado",
     "codeCopy": "Copiar",
@@ -180,7 +180,7 @@
     "nextStep1b": "",
     "nextStep2": "Abre tu página — deberías ver un pequeño badge de Paperwall",
     "nextStep3": "Instala la extensión para probar un pago",
-    "fullGuideLink": "Guía completa para publicadores ↗",
+    "fullGuideLink": "Guía completa para editores ↗",
     "platformsTitle": "Dónde pegar el código"
   },
   "terms": {

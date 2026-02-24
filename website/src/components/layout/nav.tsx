@@ -54,9 +54,9 @@ export function Nav() {
         {/* Desktop right section */}
         <div className="hidden items-center gap-3 md:flex">
           <LanguageSwitcher />
-          <Link href="/demo">
-            <Button variant="accent" size="md">{t('tryDemo')}</Button>
-          </Link>
+          <a href="/#get-started">
+            <Button variant="accent" size="md">{t('getStarted')}</Button>
+          </a>
         </div>
 
         {/* Mobile menu button */}
@@ -93,9 +93,9 @@ export function Nav() {
           </ul>
           <div className="mt-4 flex items-center gap-3">
             <LanguageSwitcher />
-            <Link href="/demo">
-              <Button variant="accent" size="sm">{t('tryDemo')}</Button>
-            </Link>
+            <a href="/#get-started">
+              <Button variant="accent" size="sm">{t('getStarted')}</Button>
+            </a>
           </div>
         </div>
       )}
