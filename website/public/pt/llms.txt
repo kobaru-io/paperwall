@@ -1,0 +1,29 @@
+# Paperwall
+> Micropagamentos para a web aberta. Pague um centavo para ler um artigo.
+
+## Sobre
+Paperwall e um kit de ferramentas de micropagamentos de codigo aberto para conteudo web.
+Editores adicionam uma tag de script. Leitores pagam centavos. Agentes de IA usam um CLI.
+
+## Links
+- Pagina inicial: https://paperwall.app/pt
+- Demo: https://paperwall.app/pt/demo
+- GitHub: https://github.com/kobaru/paperwall
+- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
+- Documentacao: https://github.com/kobaru/paperwall/tree/main/docs
+
+## Como funciona
+1. O editor adiciona uma unica tag <script> ao seu site
+2. O leitor paga centavos (a partir de $0.01) via extensao do navegador
+3. O conteudo e liberado instantaneamente. O editor recebe o pagamento imediatamente.
+
+## Para Editores
+Adicione uma linha de codigo. Funciona com qualquer site. Sem backend necessario.
+
+## Para Leitores
+Instale a extensao do Chrome. Deposite $5. Leia 500 artigos.
+
+## Para Agentes de IA
+Instale o CLI: npm install -g @kobaru/paperwall
+Buscar conteudo: paperwall fetch <url> --max-price 0.05

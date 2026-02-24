@@ -1,0 +1,29 @@
+# Paperwall
+> Micropayments for the open web. Pay a penny to read an article.
+
+## About
+Paperwall is an open-source micropayment toolkit for web content.
+Publishers add one script tag. Readers pay pennies. AI agents use a CLI.
+
+## Links
+- Homepage: https://paperwall.app
+- Demo: https://paperwall.app/demo
+- GitHub: https://github.com/kobaru/paperwall
+- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
+- Documentation: https://github.com/kobaru/paperwall/tree/main/docs
+
+## How it works
+1. Publisher adds a single <script> tag to their website
+2. Reader pays pennies (as low as $0.01) via browser extension
+3. Content unlocks instantly. Publisher gets paid immediately.
+
+## For Publishers
+Add one line of code. Works with any website. No backend needed.
+
+## For Readers
+Install the Chrome extension. Deposit $5. Read 500 articles.
+
+## For AI Agents
+Install the CLI: npm install -g @kobaru/paperwall
+Fetch content: paperwall fetch <url> --max-price 0.05

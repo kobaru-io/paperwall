@@ -1,0 +1,155 @@
+# Paperwall
+> Micropayments for the open web. Pay a penny to read an article.
+
+## About
+Paperwall is an open-source micropayment toolkit for web content.
+Publishers add one script tag. Readers pay pennies. AI agents use a CLI.
+Built by Kobaru. Licensed under GPL-3.0.
+
+## Links
+- Homepage: https://paperwall.app
+- Demo: https://paperwall.app/demo
+- GitHub: https://github.com/kobaru/paperwall
+- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
+- Documentation: https://github.com/kobaru/paperwall/tree/main/docs
+
+## How it works
+1. Publisher adds a single <script> tag to their website
+2. Reader pays pennies (as low as $0.01) via browser extension
+3. Content unlocks instantly. Publisher gets paid immediately.
+
+The system uses the x402 protocol, which brings native payments to HTTP.
+Payments are processed on the SKALE blockchain network, which has ultra-low
+transaction fees, making sub-cent payments economically viable.
+
+Payment flow: Reader signs an EIP-712 typed data message. A facilitator
+service submits the transaction on-chain using EIP-3009
+TransferWithAuthorization. The reader never needs to interact with the
+blockchain directly.
+
+## For Publishers
+Add one line of code to your HTML:
+
+```html
+<script
+  src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+  data-facilitator-url="https://gateway.kobaru.io"
+  data-pay-to="YOUR_WALLET_ADDRESS"
+  data-price="10000"
+  data-network="eip155:324705682"
+></script>
+```
+
+- `data-pay-to`: Your Ethereum wallet address (receives USDC payments)
+- `data-price`: Price in USDC micro-units (10000 = $0.01)
+- `data-network`: CAIP-2 network ID (default is SKALE Base Sepolia testnet)
+- `data-facilitator-url`: Payment processing endpoint
+
+The SDK is ~5 KB and works with any website. No backend needed.
+Wrap your paywalled content in a div with id="paperwall-content".
+
+## For Readers
+1. Install the Paperwall Chrome extension
+2. Create a wallet (password-protected, encrypted on your device)
+3. Deposit USDC (as little as $5 = 500 articles at $0.01 each)
+4. Browse the web normally. When you hit a paywalled article, click "Pay" in the extension popup
+5. Content unlocks instantly
+
+Supported browsers: Chrome, Edge, Brave, Arc (all Chromium-based).
+Firefox and Safari support is on the roadmap.
+
+Your wallet is encrypted with PBKDF2 (600k iterations) + AES-256-GCM.
+Only you can access your funds with your password.
+
+## For AI Agents
+Install the CLI globally:
+```
+npm install -g @kobaru/paperwall
+```
+
+Set up a wallet:
+```
+paperwall wallet create
+```
+
+Fetch paywalled content:
+```
+paperwall fetch <url> --max-price 0.05
+```
+
+Run as an A2A (Agent-to-Agent) server:
+```
+paperwall serve --port 4000
+```
+
+The CLI also works as an MCP server for AI assistants like Claude Code:
+```
+paperwall mcp
+```
+
+Key CLI commands:
+- `paperwall fetch <url>` — fetch a URL, paying if needed
+- `paperwall wallet create` — create a new wallet
+- `paperwall wallet balance` — check wallet balance
+- `paperwall wallet address` — show wallet address
+- `paperwall budget set <amount>` — set spending budget
+- `paperwall budget status` — check budget usage
+- `paperwall serve` — start the A2A server
+- `paperwall mcp` — start the MCP server
+
+Environment variables:
+- `PAPERWALL_PRIVATE_KEY` — direct private key for automation/CI
+- `PAPERWALL_PORT` — A2A server port (default: 4000)
+- `PAPERWALL_ACCESS_KEYS` — comma-separated Bearer tokens for server auth
+
+## Pricing
+- Publishers set their own prices (typically $0.01 to $0.10 per article)
+- Publishers keep 100% of payments. No middlemen.
+- A $5 deposit lasts for 500 articles at $0.01 each
+- Transaction fees on SKALE are ultra-low (near zero)
+- No monthly subscriptions required
+- No minimum commitment
+
+## FAQ
+
+Q: What is Paperwall?
+A: Paperwall lets you pay tiny amounts (as low as one penny) to read articles online. No subscriptions needed.
+
+Q: How much does it cost?
+A: Publishers set their own prices. Most articles cost between $0.01 and $0.10. A $5 deposit can last months.
+
+Q: Is my money safe?
+A: Your funds are stored in an encrypted wallet on your device. Only you can access them with your password.
+
+Q: How do publishers get paid?
+A: Instantly. When you pay for an article, the publisher receives the money right away.
+
+Q: What about AI agents?
+A: AI agents can use the CLI tool to automatically pay for and access content. Perfect for research and automated workflows.
+
+Q: Do I need cryptocurrency knowledge?
+A: Not at all. The extension handles everything. You just click "pay" and the article unlocks.
+
+Q: What if I don't like an article I paid for?
+A: At one penny per article, the risk is minimal. Preview features are in development.
+
+Q: Is Paperwall open source?
+A: Yes! Everything is open source under GPL-3.0.
+
+Q: Which browsers are supported?
+A: Chrome and Chromium-based browsers (Edge, Brave, Arc). Firefox and Safari support is planned.
+
+Q: How do I add Paperwall to my website?
+A: Add a single script tag to your HTML. It takes less than 60 seconds.
+
+## Technical Overview
+- Protocol: x402 (HTTP native payments)
+- Blockchain: SKALE (ultra-low fee EVM chain)
+- Token: USDC (bridged via SKALE Bridge)
+- Chain ID: eip155:324705682 (SKALE Base Sepolia testnet)
+- Signing: EIP-712 typed data + EIP-3009 TransferWithAuthorization
+- SDK size: ~5 KB (IIFE bundle)
+- Extension: Chrome MV3 (Manifest V3)
+- CLI: Node.js, ESM, TypeScript
+- License: GPL-3.0
