@@ -9,7 +9,9 @@
 
 Paperwall is an open-source micropayment system that makes it easy for readers (humans and agents) to unlock content for just pennies. By using crypto (currently USDC on SKALE), payments can be as low as $0.01. It works for everyone: publishers get a single script tag, readers get a quick browser extension, AI agents use a batteries-included CLI tool or A2A server. It's that simple.
 
-> **Status:** Testnet only. Paperwall is a hackathon project currently deployed on the SKALE testnet. Use test funds only. Not yet production-ready.
+> **Status:** Testnet (v0.2.0). Paperwall is currently deployed on the SKALE testnet. Use test funds only. Mainnet support coming soon.
+>
+> **Website:** [www.paperwall.app](https://www.paperwall.app) | **Roadmap:** [What's next](docs/roadmap.md)
 
 ---
 
@@ -169,7 +171,7 @@ You want to understand the architecture, run the project locally, or submit a pu
 Add this script tag to any page you want to paywall:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+<script src="https://paperwall.app/publisher-sdk.js"
   data-facilitator-url="https://gateway.kobaru.io"
   data-pay-to="YOUR_EVM_ADDRESS"
   data-price="10000"
@@ -189,7 +191,7 @@ See the full **[publisher guide](docs/publisher-guide.md)** for configuration de
 
 ### For readers
 
-1. Install the Paperwall extension (manual install during alpha -- see [user guide](docs/user-guide.md))
+1. Install the Paperwall extension (see [user guide](docs/user-guide.md))
 2. Create a wallet with a strong password
 3. Fund your wallet with SKALE testnet USDC
 4. Visit a Paperwall-enabled site and click "Pay" when prompted
@@ -201,7 +203,7 @@ git clone https://github.com/kobaru-io/paperwall.git
 cd paperwall
 npm install
 npm run build
-npm test        # 300+ tests across all packages
+npm test        # 950+ tests across all packages
 ```
 
 Load the extension in Chrome for development:
@@ -261,7 +263,7 @@ paperwall/
 - **USDC only** -- no support for ETH or other tokens
 - **SKALE network only** -- other L2s are not yet supported
 - **Testnet phase** -- use test funds, not real money
-- **Not on Chrome Web Store** -- manual install required during testnet
+- **Chrome Web Store pending** -- extension submitted, awaiting approval
 
 ---
 
