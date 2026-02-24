@@ -8,7 +8,7 @@ export default function Kobaru() {
   const prefersReduced = useReducedMotion();
 
   return (
-    <section className="bg-[var(--muted)] px-6 py-20">
+    <section className="bg-[var(--muted)] px-4 py-12 sm:px-6 sm:py-20">
       <motion.div
         className="mx-auto max-w-3xl text-center"
         {...(prefersReduced

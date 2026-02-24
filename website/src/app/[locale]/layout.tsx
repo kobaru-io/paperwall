@@ -24,7 +24,7 @@ const spaceGrotesk = Space_Grotesk({
 
 const localeMap: Record<string, string> = {
   'en': 'en_US',
-  'es': 'es',
+  'es': 'es_MX',
   'pt': 'pt_BR',
 };
 
@@ -57,9 +57,14 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     },
     twitter: {
       card: 'summary_large_image',
+      site: '@GoKobaru',
+      creator: '@GoKobaru',
       title: t('title'),
       description: t('description'),
       images: ['/og-image.png'],
+    },
+    other: {
+      'profile:bluesky': 'https://bsky.app/profile/kobaru.io',
     },
   };
 }
@@ -89,7 +94,7 @@ export default async function LocaleLayout({
             Skip to content
           </a>
           <Nav />
-          <main id="main-content" className="pt-24">
+          <main id="main-content" className="pt-16 md:pt-24">
             {children}
           </main>
           <Footer />

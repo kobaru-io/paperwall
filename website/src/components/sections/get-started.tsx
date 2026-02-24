@@ -18,7 +18,7 @@ export default function GetStarted() {
         };
 
   return (
-    <section id="get-started" className="border-t-4 border-[var(--border)] bg-[var(--card)] px-6 py-20">
+    <section id="get-started" className="border-t-4 border-[var(--border)] bg-[var(--card)] px-4 py-12 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-6xl">
 
         {/* Section heading — outside the bento */}
@@ -42,12 +42,11 @@ export default function GetStarted() {
         <div
           className="grid grid-cols-1 gap-0 border-2 border-[var(--border)]
                      md:grid-cols-3 md:grid-rows-2"
-          style={{ minHeight: 520 }}
         >
           {/* Publishers — wide, top-left (spans 2 cols) */}
           <motion.div
             className="flex flex-col justify-between border-b-2 border-[var(--border)]
-                       bg-[var(--primary)] p-8 text-[var(--primary-foreground)]
+                       bg-[var(--primary)] p-5 text-[var(--primary-foreground)] sm:p-8
                        md:col-span-2 md:border-b-2 md:border-r-2"
             {...anim(0.05)}
           >
@@ -61,7 +60,7 @@ export default function GetStarted() {
               <p className="mb-6 max-w-lg text-base leading-relaxed opacity-80">
                 {t('publisherDesc')}
               </p>
-              <pre className="mb-6 max-w-lg overflow-x-auto border border-white/20 bg-white/10 p-3 text-xs font-bold">
+              <pre className="mb-6 max-w-lg overflow-x-auto break-all whitespace-pre-wrap border border-white/20 bg-white/10 p-3 text-xs font-bold">
                 <code>{'<script src="https://paperwall.app/publisher-sdk.js"></script>'}</code>
               </pre>
             </div>
@@ -82,7 +81,7 @@ export default function GetStarted() {
           {/* Readers — tall right column, spans 2 rows */}
           <motion.div
             className="flex flex-col justify-between border-b-2 border-[var(--border)]
-                       bg-[var(--muted)] p-8 text-[var(--foreground)]
+                       bg-[var(--muted)] p-5 text-[var(--foreground)] sm:p-8
                        md:row-span-2 md:border-b-0"
             {...anim(0.1)}
           >
@@ -114,7 +113,7 @@ export default function GetStarted() {
           {/* AI Agent Users — bottom-left */}
           <motion.div
             className="flex flex-col justify-between border-b-2 border-[var(--border)]
-                       bg-[var(--card)] p-8 text-[var(--foreground)]
+                       bg-[var(--card)] p-5 text-[var(--foreground)] sm:p-8
                        md:border-b-0 md:border-r-2"
             {...anim(0.15)}
           >
@@ -146,7 +145,7 @@ export default function GetStarted() {
           {/* Developers — bottom-right of left 2 cols */}
           <motion.div
             className="flex flex-col justify-between
-                       bg-[var(--accent)] p-8 text-[var(--accent-foreground)]"
+                       bg-[var(--accent)] p-5 text-[var(--accent-foreground)] sm:p-8"
             {...anim(0.2)}
           >
             <div>

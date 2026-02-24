@@ -18,7 +18,7 @@ export default function Pricing() {
         };
 
   return (
-    <section id="pricing" className="border-t-4 border-[var(--border)] bg-[var(--muted)] px-6 py-20">
+    <section id="pricing" className="border-t-4 border-[var(--border)] bg-[var(--muted)] px-4 py-12 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-4xl">
         <h2 className="mb-2 text-center font-[family-name:var(--font-head)] text-3xl md:text-5xl">
           {t('title')}
@@ -35,7 +35,7 @@ export default function Pricing() {
             <h3 className="mb-4 font-[family-name:var(--font-head)] text-xl text-[var(--muted-foreground)]">
               {t('subModel')}
             </h3>
-            <p className="mb-2 font-[family-name:var(--font-head)] text-5xl line-through decoration-[var(--destructive)] decoration-2">
+            <p className="mb-2 font-[family-name:var(--font-head)] text-3xl line-through decoration-[var(--destructive)] decoration-2 sm:text-5xl">
               {t('subPrice')}
             </p>
             <p className="text-base text-[var(--muted-foreground)]">{t('subNote')}</p>
@@ -49,7 +49,7 @@ export default function Pricing() {
             <h3 className="mb-4 font-[family-name:var(--font-head)] text-xl opacity-70">
               {t('pwModel')}
             </h3>
-            <p className="mb-2 font-[family-name:var(--font-head)] text-5xl">
+            <p className="mb-2 font-[family-name:var(--font-head)] text-3xl sm:text-5xl">
               {t('pwPrice')}
             </p>
             <p className="text-base font-bold text-[var(--accent)]">{t('pwNote')}</p>

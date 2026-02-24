@@ -24,7 +24,7 @@ export default function FAQ() {
   }, []);
 
   return (
-    <section id="faq" className="px-6 py-20">
+    <section id="faq" className="px-4 py-12 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-3xl">
         <h2 className="mb-12 text-center font-[family-name:var(--font-head)] text-3xl md:text-5xl">
           {t('title')}

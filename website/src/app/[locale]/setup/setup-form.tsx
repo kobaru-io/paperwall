@@ -167,12 +167,12 @@ export default function SetupForm() {
     <div className="min-h-screen bg-[var(--background)]">
 
       {/* Page header */}
-      <div className="border-b-4 border-[var(--border)] bg-[var(--primary)] px-6 py-10 text-[var(--primary-foreground)]">
+      <div className="border-b-4 border-[var(--border)] bg-[var(--primary)] px-4 py-8 text-[var(--primary-foreground)] sm:px-6 sm:py-10">
         <div className="mx-auto max-w-5xl">
           <Link href="/" className="mb-4 inline-block text-sm font-bold opacity-60 hover:opacity-100">
             {t('backHome')}
           </Link>
-          <h1 className="font-[family-name:var(--font-head)] text-4xl md:text-6xl">
+          <h1 className="font-[family-name:var(--font-head)] text-3xl sm:text-4xl md:text-6xl">
             {t('pageTitle')}
           </h1>
           <p className="mt-3 max-w-xl text-lg opacity-70">
@@ -181,11 +181,11 @@ export default function SetupForm() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-6 py-12">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="grid grid-cols-1 gap-0 md:grid-cols-2">
 
           {/* Left — form */}
-          <div className="border-2 border-[var(--border)] bg-[var(--card)] p-8 shadow-[6px_6px_0_var(--border)] md:border-r-0">
+          <div className="border-2 border-[var(--border)] bg-[var(--card)] p-4 shadow-[6px_6px_0_var(--border)] sm:p-8 md:border-r-0">
 
             {/* Wallet address */}
             <div className="mb-8">

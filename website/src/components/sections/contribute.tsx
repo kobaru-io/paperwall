@@ -32,7 +32,7 @@ export default function Contribute() {
 
           {/* Left — text */}
           <motion.div
-            className="border-b-4 border-[var(--border)] p-10 text-[var(--primary-foreground)] md:border-b-0 md:border-r-4"
+            className="border-b-4 border-[var(--border)] p-6 text-[var(--primary-foreground)] sm:p-10 md:border-b-0 md:border-r-4"
             {...anim(0)}
           >
             <p className="mb-4 text-sm font-bold uppercase tracking-widest opacity-60">
@@ -65,7 +65,7 @@ export default function Contribute() {
             {stats.map(({ label, icon }, i) => (
               <div
                 key={i}
-                className="flex items-center gap-5 px-10 py-8 text-[var(--primary-foreground)]"
+                className="flex items-center gap-5 px-5 py-6 text-[var(--primary-foreground)] sm:px-10 sm:py-8"
               >
                 <span className="text-3xl" aria-hidden="true">{icon}</span>
                 <span className="font-[family-name:var(--font-head)] text-2xl">{label}</span>

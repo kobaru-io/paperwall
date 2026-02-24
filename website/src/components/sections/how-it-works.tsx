@@ -14,7 +14,7 @@ export default function HowItWorks() {
   const prefersReduced = useReducedMotion();
 
   return (
-    <section id="how-it-works" className="bg-[var(--muted)] px-6 py-20">
+    <section id="how-it-works" className="bg-[var(--muted)] px-4 py-12 sm:px-6 sm:py-20">
       <div className="mx-auto max-w-5xl">
         <h2 className="mb-16 text-center font-[family-name:var(--font-head)] text-3xl md:text-5xl">
           {t('title')}

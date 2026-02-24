@@ -24,7 +24,7 @@ export function Nav() {
       className="fixed top-0 right-0 left-0 z-50 border-b-4 border-[var(--primary-hover)] bg-[var(--primary)]"
       aria-label="Main navigation"
     >
-      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:h-24">
         {/* Logo */}
         <Link href="/" className="shrink-0">
           <Image
@@ -32,6 +32,7 @@ export function Nav() {
             alt="Paperwall"
             width={320}
             height={58}
+            className="h-8 w-auto md:h-auto md:w-[320px]"
             priority
           />
         </Link>
