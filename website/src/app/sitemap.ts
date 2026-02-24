@@ -1,7 +1,9 @@
 import type { MetadataRoute } from 'next';
 
+export const revalidate = 3600;
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://paperwall.app';
+  const baseUrl = 'https://www.paperwall.app';
   const locales = ['en', 'es', 'pt'];
   const pages = ['', '/demo', '/setup', '/terms', '/privacy'];
 

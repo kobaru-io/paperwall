@@ -35,19 +35,21 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return {
     title: t('title'),
     description: t('description'),
-    metadataBase: new URL('https://paperwall.app'),
+    metadataBase: new URL('https://www.paperwall.app'),
+    robots: { index: true, follow: true },
     alternates: {
       canonical: `/${locale === 'en' ? '' : locale}`,
       languages: {
         'en': '/',
         'es': '/es',
         'pt': '/pt',
+        'x-default': '/',
       },
     },
     openGraph: {
       title: t('title'),
       description: t('description'),
-      url: `https://paperwall.app/${locale === 'en' ? '' : locale}`,
+      url: `https://www.paperwall.app/${locale === 'en' ? '' : locale}`,
       siteName: 'Paperwall',
       locale: localeMap[locale] || 'en_US',
       type: 'website',

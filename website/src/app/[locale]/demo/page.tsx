@@ -1,10 +1,23 @@
-'use client';
-
-import { useTranslations } from 'next-intl';
+import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import Script from 'next/script';
-export default function DemoPage() {
-  const t = useTranslations('demo');
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  const prefix = locale === 'en' ? '' : `/${locale}`;
+  return {
+    title: 'Live Demo — Try Paperwall Micropayments | Paperwall',
+    description: 'See how Paperwall works. Pay a penny to unlock content — no account, no subscription needed. Try the live demo now.',
+    alternates: {
+      canonical: `${prefix}/demo`,
+    },
+  };
+}
+
+export default async function DemoPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'demo' });
 
   return (
     <section className="min-h-screen py-12 px-4">

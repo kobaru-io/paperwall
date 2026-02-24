@@ -7,10 +7,13 @@ import Showcase from '@/components/sections/showcase';
 import Kobaru from '@/components/sections/kobaru';
 import Contribute from '@/components/sections/contribute';
 import FAQ from '@/components/sections/faq';
+import FaqJsonLd from '@/components/faq-json-ld';
 
-export default function Home() {
+export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
   return (
     <>
+      <FaqJsonLd locale={locale} />
       <Hero />
       <Problem />
       <HowItWorks />

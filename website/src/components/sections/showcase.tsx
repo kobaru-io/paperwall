@@ -41,7 +41,7 @@ export default function Showcase() {
             </h3>
             <p className="mb-6 text-base">{t('emptyDesc')}</p>
             <a
-              href="https://github.com/kobaru/paperwall/issues"
+              href="https://github.com/kobaru-io/paperwall/issues"
               className="inline-flex h-10 items-center justify-center rounded-none border-2 border-[var(--border)] bg-[var(--primary)] px-5 font-bold text-[var(--primary-foreground)] shadow-[4px_4px_0_var(--border)] transition-all hover:shadow-[6px_6px_0_var(--border)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
             >
               {t('emptyCta')}
