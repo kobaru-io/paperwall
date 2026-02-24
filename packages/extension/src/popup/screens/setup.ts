@@ -6,14 +6,26 @@ export function renderSetup(
   onComplete: (address: string) => void,
 ): void {
   container.innerHTML = '';
+  container.style.padding = '16px';
 
-  const heading = document.createElement('h1');
-  heading.textContent = 'Create Wallet';
+  const welcome = document.createElement('h1');
+  welcome.textContent = 'Welcome to Paperwall';
+  welcome.className = 'screen-title';
+
+  const intro = document.createElement('p');
+  intro.textContent =
+    'Support the creators you love with seamless micropayments. Set up your wallet to get started — it only takes a moment.';
+  intro.className = 'screen-description';
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'Create Your Wallet';
   heading.className = 'screen-title';
+  heading.style.fontSize = '16px';
+  heading.style.marginTop = '8px';
 
   const description = document.createElement('p');
   description.textContent =
-    'Set a password to encrypt your wallet. You will need this password to unlock your wallet.';
+    'Choose a password to encrypt your wallet. You\'ll need it each time you open the extension.';
   description.className = 'screen-description';
 
   // Password field
@@ -151,6 +163,8 @@ export function renderSetup(
   confirmInput.addEventListener('keydown', handleKeydown);
 
   container.append(
+    welcome,
+    intro,
     heading,
     description,
     passwordLabel,

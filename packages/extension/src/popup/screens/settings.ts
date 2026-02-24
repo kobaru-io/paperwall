@@ -374,7 +374,17 @@ function buildAboutSection(): HTMLElement {
   licenseValue.textContent = 'GPL-3.0';
   licenseEl.append(licenseLabel, licenseValue);
 
-  section.append(heading, versionEl, githubEl, licenseEl);
+  const websiteEl = document.createElement('p');
+  websiteEl.className = 'about-row';
+  const websiteLink = document.createElement('a');
+  websiteLink.href = 'https://www.paperwall.app';
+  websiteLink.target = '_blank';
+  websiteLink.rel = 'noopener noreferrer';
+  websiteLink.textContent = 'www.paperwall.app';
+  websiteLink.className = 'about-link';
+  websiteEl.append(document.createTextNode('Website: '), websiteLink);
+
+  section.append(heading, versionEl, websiteEl, githubEl, licenseEl);
   return section;
 }
 

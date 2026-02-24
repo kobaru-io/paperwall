@@ -18,6 +18,7 @@ export function renderPaymentPrompt(
   onComplete: () => void,
 ): void {
   container.innerHTML = '';
+  container.style.padding = '16px';
 
   const heading = document.createElement('h1');
   heading.textContent = 'Payment Request';

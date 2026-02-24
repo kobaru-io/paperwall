@@ -6,6 +6,7 @@ export function renderUnlock(
   onComplete: () => void,
 ): void {
   container.innerHTML = '';
+  container.style.padding = '16px';
 
   const heading = document.createElement('h1');
   heading.textContent = 'Unlock Wallet';

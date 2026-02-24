@@ -17,6 +17,12 @@ import { addPayment, getHistory, updatePaymentStatus } from './history.js';
 import { formatUsdcFromString } from '../shared/format.js';
 import { getExpectedAsset } from '../shared/constants.js';
 
+// ── Logging ─────────────────────────────────────────────────────────
+
+function ts(): string {
+  return new Date().toISOString();
+}
+
 // ── Types ───────────────────────────────────────────────────────────
 
 interface WalletData {
@@ -243,6 +249,8 @@ async function handlePageHasPaperwall(
 
   activePages.set(tabId, state);
 
+  console.log(`[paperwall ${ts()}] Page detected:`, { origin, price, mode: state.mode, optimistic: state.optimistic });
+
   // Check affordability for badge color
   const sessionData = await chrome.storage.session.get('privateKey');
   if (sessionData['privateKey']) {
@@ -442,6 +450,7 @@ async function handleSignAndPay(
 
     if (pageState.optimistic) {
       // -- Optimistic flow: notify immediately, settle in background --
+      console.log(`[paperwall ${ts()}] Optimistic flow: unlocking content immediately, settling in background`);
 
       // 8a. Send PAYMENT_OPTIMISTIC to content script
       try {
@@ -499,6 +508,7 @@ async function handleSignAndPay(
     }
 
     // -- Non-optimistic flow (existing behavior) --
+    console.log(`[paperwall ${ts()}] Non-optimistic flow: waiting for settlement before unlocking`);
 
     // 8. Settle via facilitator
     const settleResult = await settle(
@@ -507,6 +517,8 @@ async function handleSignAndPay(
       paymentPayload,
       paymentRequirements,
     );
+
+    console.log(`[paperwall ${ts()}] Settlement confirmed:`, { requestId, txHash: settleResult.transaction });
 
     // 9. Save payment record
     await addPayment({
@@ -560,6 +572,7 @@ async function handleSignAndPay(
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : 'Unknown payment error';
+    console.error(`[paperwall ${ts()}] Payment failed:`, { error: errorMessage });
 
     setBadgeError(tabId);
 
@@ -597,8 +610,10 @@ async function settleInBackground(
   paymentPayload: PaymentPayload,
   paymentRequirements: PaymentRequirements,
 ): Promise<void> {
+  console.log(`[paperwall ${ts()}] Background settlement started for request:`, requestId);
   try {
     const settleResult = await settle(facilitatorUrl, siteKey, paymentPayload, paymentRequirements);
+    console.log(`[paperwall ${ts()}] Settlement confirmed:`, { requestId, txHash: settleResult.transaction });
 
     // Update history to confirmed
     await updatePaymentStatus(requestId, 'confirmed', {
@@ -628,6 +643,7 @@ async function settleInBackground(
     chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.success });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Settlement failed';
+    console.error(`[paperwall ${ts()}] Settlement failed:`, { requestId, error: errorMessage });
 
     // Update history to failed
     await updatePaymentStatus(requestId, 'failed', { error: errorMessage });
