@@ -5,6 +5,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# -- Next.js --
+website/.next/
+website/out/
+
 # -- Environment & secrets --
 .env
 .env.*
@@ -39,6 +43,9 @@ packages/*/CLAUDE.md
 # -- Pre-dev research --
 docs/pre-dev/
 docs/codereview/
+# -- Release archives --
+packages/extension/releases/
+
 # -- Misc --
 *.swp
 *.swo

@@ -684,6 +684,28 @@ This runs `tsc --noEmit` for the SDK and extension packages.
 
 ---
 
+## Debugging the extension
+
+The extension logs key events (page detection, payment flow, settlement results) to the **service worker console**, not the regular browser DevTools.
+
+To view the logs:
+
+1. Open `chrome://extensions` in Chrome
+2. Make sure **Developer mode** is enabled (toggle in the top-right corner)
+3. Find **Paperwall** in the list
+4. Click the **"service worker"** link under "Inspect views"
+5. A separate DevTools window opens — check the **Console** tab
+
+Log entries are prefixed with `[paperwall <ISO timestamp>]` and include:
+
+- **Page detected** — origin, price, mode, optimistic flag
+- **Optimistic/Non-optimistic flow** — which payment path was taken
+- **Background settlement started** — request ID
+- **Settlement confirmed** — request ID and transaction hash
+- **Settlement/Payment failed** — request ID and error message
+
+The regular browser console (F12 on a page) shows SDK-level messages from the content script, but all wallet and payment logic runs in the service worker.
+
 ## Key technical decisions
 
 ### Why SKALE network?
