@@ -98,7 +98,7 @@ export default function GetStarted() {
             </div>
             <div>
               <a
-                href="https://github.com/kobaru-io/paperwall/blob/main/docs/user-guide.md#step-1-install-the-extension"
+                href="https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako"
                 className="inline-flex items-center gap-2 border-2 border-[var(--border)]
                            bg-[var(--primary)] px-5 py-2.5 font-bold text-[var(--primary-foreground)]
                            shadow-[4px_4px_0_var(--border)] transition-all

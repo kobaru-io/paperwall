@@ -26,7 +26,7 @@ This document outlines development priorities for Paperwall, organized by timeli
 - Payment history tracking (1000 record cap)
 - Settings tab, about section, history tab, stats tab
 - Import/export private keys
-- Chrome Web Store submission (pending approval)
+- Chrome Web Store published ([install here](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako))
 
 ✅ **Payment Flow**
 
@@ -74,7 +74,7 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 - **SKALE Mainnet support** - Real USDC payments
 - **CDN distribution** - unpkg/jsdelivr auto-hosting
-- **Chrome Web Store approval** - Get extension published and linked from website
+- **Chrome Web Store** - Extension published ([install here](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako))
 
 ### 2. Kobaru Console Integration
 

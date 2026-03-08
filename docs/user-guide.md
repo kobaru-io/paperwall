@@ -41,23 +41,11 @@ That's all you need to install the extension. To actually pay for content, you w
 
 ## Step 1: Install the extension
 
-> **Note:** Paperwall is not yet on the Chrome Web Store. During the testnet phase, you install it manually. This takes about 2 minutes.
+### Install from the Chrome Web Store
 
-### Get the extension files
-
-Pre-built releases will be available on the [GitHub Releases page](https://github.com/kobaru/paperwall/releases) once Paperwall reaches beta. For now, during the testnet phase, you need to build from source.
-
-> **If you're comfortable with a terminal,** follow the [developer guide](developer-guide.md) to clone and build the project. After running `npm run build`, the extension files will be in `packages/extension/dist`.
->
-> **If you're not comfortable building from source,** ask a developer friend to build it for you, or wait for the pre-built release on GitHub Releases (coming with Phase 1, Q2 2026).
-
-### Load it into Chrome
-
-1. Open Chrome
-2. In the address bar at the top, type `chrome://extensions` and press Enter
-3. In the top-right corner of the page, find the switch labeled **"Developer mode"** and turn it **on** (it should turn blue)
-4. Click the **"Load unpacked"** button that appears in the top-left area
-5. In the file picker that opens, navigate to the `packages/extension/dist` folder and click **"Select Folder"**
+1. Open Chrome and visit the [Paperwall extension page](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako) on the Chrome Web Store
+2. Click the **"Add to Chrome"** button
+3. In the confirmation dialog, click **"Add extension"**
 
 You should now see "Paperwall" listed on the extensions page with a small icon.
 

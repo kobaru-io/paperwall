@@ -191,7 +191,7 @@ See the full **[publisher guide](docs/publisher-guide.md)** for configuration de
 
 ### For readers
 
-1. Install the Paperwall extension (see [user guide](docs/user-guide.md))
+1. Install the [Paperwall extension](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako) from the Chrome Web Store (see [user guide](docs/user-guide.md))
 2. Create a wallet with a strong password
 3. Fund your wallet with SKALE testnet USDC
 4. Visit a Paperwall-enabled site and click "Pay" when prompted
@@ -263,7 +263,6 @@ paperwall/
 - **USDC only** -- no support for ETH or other tokens
 - **SKALE network only** -- other L2s are not yet supported
 - **Testnet phase** -- use test funds, not real money
-- **Chrome Web Store pending** -- extension submitted, awaiting approval
 
 ---
 
