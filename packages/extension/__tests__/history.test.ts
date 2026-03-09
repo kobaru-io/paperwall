@@ -4,6 +4,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 type StorageData = Record<string, unknown>;
 
+// TODO(review): inline storage mock lacks remove/clear methods; if addPayment/updatePaymentStatus
+// ever calls chrome.storage.local.remove, this mock will throw instead of failing cleanly.
+// Consider importing from __tests__/helpers/storage-mock.ts if rootDir allows.
+// Severity: Low - ring:test-reviewer, 2026-03-09
 function createStorageMock() {
   let store: StorageData = {};
   return {

@@ -1,38 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { handleMessage } from '../src/background/message-router.js';
+import { handleMessage, _resetBruteForceStateForTest } from '../src/background/message-router.js';
+import { createStorageMock } from './helpers/storage-mock.js';
 
 // ── Chrome API Mocks ────────────────────────────────────────────────
-
-type StorageData = Record<string, unknown>;
-
-function createStorageMock() {
-  let store: StorageData = {};
-  return {
-    get: vi.fn(async (keys?: string | string[] | null) => {
-      if (!keys || keys === null) return { ...store };
-      if (typeof keys === 'string') {
-        return keys in store ? { [keys]: store[keys] } : {};
-      }
-      const result: StorageData = {};
-      for (const k of keys) {
-        if (k in store) result[k] = store[k];
-      }
-      return result;
-    }),
-    set: vi.fn(async (items: StorageData) => {
-      Object.assign(store, items);
-    }),
-    remove: vi.fn(async (keys: string | string[]) => {
-      const arr = typeof keys === 'string' ? [keys] : keys;
-      for (const k of arr) delete store[k];
-    }),
-    clear: vi.fn(async () => {
-      store = {};
-    }),
-    _getStore: () => store,
-    _reset: () => { store = {}; },
-  };
-}
 
 const localStorageMock = createStorageMock();
 const sessionStorageMock = createStorageMock();
@@ -44,6 +14,7 @@ vi.stubGlobal('chrome', {
   },
   runtime: {
     id: 'test-extension-id',
+    getURL: vi.fn((path: string) => `chrome-extension://test-extension-id/${path}`),
     onMessage: { addListener: vi.fn() },
     lastError: null,
   },
@@ -60,6 +31,12 @@ beforeEach(() => {
   localStorageMock._reset();
   sessionStorageMock._reset();
   vi.clearAllMocks();
+  // Restore getURL implementation after clearAllMocks wipes it
+  vi.mocked(chrome.runtime.getURL).mockImplementation((path: string) =>
+    `chrome-extension://test-extension-id/${path}`
+  );
+  // Reset brute-force state to prevent leakage between describe blocks
+  _resetBruteForceStateForTest();
 });
 
 // ── Helper ──────────────────────────────────────────────────────────
@@ -140,6 +117,14 @@ describe('message-router', () => {
       expect(response.unlocked).toBe(true);
       expect(response.address).toBe(createResult.address);
     });
+
+    it('with null wallet value in storage returns { exists: false, unlocked: false }', async () => {
+      // Simulate storage returning { wallet: null } (corrupted or cleared entry)
+      await localStorageMock.set({ wallet: null });
+      const response = await sendMessage({ type: 'GET_WALLET_STATE' });
+      expect(response.exists).toBe(false);
+      expect(response.unlocked).toBe(false);
+    });
   });
 
   describe('UNLOCK_WALLET', () => {
@@ -172,6 +157,17 @@ describe('message-router', () => {
 
       expect(response.success).toBe(false);
       expect(response.error).toContain('Incorrect password');
+    });
+
+    it('with null wallet value in storage returns { success: false, error }', async () => {
+      // Simulate storage returning { wallet: null } (no wallet set up)
+      await localStorageMock.set({ wallet: null });
+      const response = await sendMessage({
+        type: 'UNLOCK_WALLET',
+        password: 'any-password',
+      });
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('No wallet found');
     });
   });
 
@@ -208,26 +204,36 @@ describe('message-router', () => {
       expect(response.success).toBe(false);
       expect(response.error).toContain('locked');
     });
+
+    it('returns success: false and error message when wallet is locked', async () => {
+      // Explicit check that both success and error fields are set correctly
+      await sendMessage({ type: 'CREATE_WALLET', password: 'pw' });
+      sessionStorageMock._reset();
+
+      const response = await sendMessage({ type: 'GET_BALANCE' });
+      expect(response.success).toBe(false);
+      expect(typeof response.error).toBe('string');
+      expect((response.error as string).length).toBeGreaterThan(0);
+    });
   });
 
   describe('UNLOCK_WALLET brute-force lockout', () => {
     async function resetLockoutState(): Promise<void> {
-      // Advance time past any active lockout period
-      vi.useFakeTimers();
-      vi.advanceTimersByTime(6 * 60 * 1000); // 6 minutes
-      vi.useRealTimers();
-
-      // Reset module-level unlockAttempts by doing a successful unlock
+      _resetBruteForceStateForTest();
       await sendMessage({ type: 'CREATE_WALLET', password: 'reset-pw' });
-      sessionStorageMock._reset();
-      await sendMessage({ type: 'UNLOCK_WALLET', password: 'reset-pw' });
-      // Now unlockAttempts = 0, lockedUntil = 0
-      localStorageMock._reset();
-      sessionStorageMock._reset();
+      const unlockResult = await sendMessage({ type: 'UNLOCK_WALLET', password: 'reset-pw' });
+      if (!unlockResult.success) {
+        throw new Error(`resetLockoutState: UNLOCK_WALLET failed: ${JSON.stringify(unlockResult)}`);
+      }
     }
 
-    it('shows decreasing attempts remaining', async () => {
+    // Ensure brute-force counter is reset before every test in this suite
+    // to prevent state leakage between tests (e.g. if a prior test fails mid-way).
+    beforeEach(async () => {
       await resetLockoutState();
+    });
+
+    it('shows decreasing attempts remaining', async () => {
       await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
       sessionStorageMock._reset();
 
@@ -245,7 +251,6 @@ describe('message-router', () => {
     });
 
     it('locks wallet after 5 consecutive wrong password attempts', async () => {
-      await resetLockoutState();
       await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
       sessionStorageMock._reset();
 
@@ -263,7 +268,6 @@ describe('message-router', () => {
     });
 
     it('rejects correct password during lockout period', async () => {
-      await resetLockoutState();
       await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
       sessionStorageMock._reset();
 
@@ -277,6 +281,20 @@ describe('message-router', () => {
       expect(response.success).toBe(false);
       expect(response.error).toContain('Too many attempts');
     });
+
+    it('accepts correct password after lockout period expires', async () => {
+      // Trigger lockout with 5 wrong attempts
+      for (let i = 0; i < 5; i++) {
+        await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong-pw' });
+      }
+
+      // Directly reset the lockout (simulating time passage without wall-clock wait)
+      _resetBruteForceStateForTest();
+
+      // Correct password must succeed after reset
+      const response = await sendMessage({ type: 'UNLOCK_WALLET', password: 'reset-pw' });
+      expect(response.success).toBe(true);
+    });
   });
 
   describe('unknown message type', () => {
@@ -284,6 +302,67 @@ describe('message-router', () => {
       const response = await sendMessage({ type: 'NONEXISTENT_ACTION' });
       expect(response.success).toBe(false);
       expect(response.error).toContain('Unknown');
+    });
+  });
+
+  describe('sender URL authorization', () => {
+    function sendWithSender(
+      message: Record<string, unknown>,
+      sender: Partial<chrome.runtime.MessageSender>,
+    ): Promise<Record<string, unknown>> {
+      return new Promise((resolve) => {
+        handleMessage(
+          message as chrome.runtime.MessageEvent,
+          sender as chrome.runtime.MessageSender,
+          (response: unknown) => resolve(response as Record<string, unknown>),
+        );
+      });
+    }
+
+    it('accepts moz-extension:// sender when getURL returns moz-extension://', async () => {
+      vi.mocked(chrome.runtime.getURL).mockImplementation(
+        (path: string) => `moz-extension://test-uuid/${path}`,
+      );
+      // Create wallet using moz-extension sender so auth passes during setup too
+      const createRes = await sendWithSender(
+        { type: 'CREATE_WALLET', password: 'moz-pw' },
+        { url: 'moz-extension://test-uuid/popup.html' },
+      );
+      expect(createRes.success).toBe(true);
+
+      sessionStorageMock._reset();
+      const unlockRes = await sendWithSender(
+        { type: 'UNLOCK_WALLET', password: 'moz-pw' },
+        { url: 'moz-extension://test-uuid/popup.html' },
+      );
+      expect(unlockRes.success).toBe(true);
+    });
+
+    it('rejects https:// sender for sensitive operations', async () => {
+      const response = await sendWithSender(
+        { type: 'UNLOCK_WALLET', password: 'any' },
+        { url: 'https://evil.example.com/page' },
+      );
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Unauthorized sender');
+    });
+
+    it('rejects sender with undefined URL for sensitive operations', async () => {
+      const response = await sendWithSender(
+        { type: 'UNLOCK_WALLET', password: 'any' },
+        {},
+      );
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Unauthorized sender');
+    });
+
+    it('rejects sender with empty string URL for sensitive operations', async () => {
+      const response = await sendWithSender(
+        { type: 'UNLOCK_WALLET', password: 'any' },
+        { url: '' },
+      );
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Unauthorized sender');
     });
   });
 });

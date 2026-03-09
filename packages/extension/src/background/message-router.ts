@@ -247,6 +247,10 @@ async function handlePageHasPaperwall(
     optimistic: (message['optimistic'] as string) !== 'false',
   };
 
+  // TODO(review): publisher-controlled payTo/amount/network fields stored without
+  // address-format validation (EIP-55 checksum). Tier 1 trust model accepts this —
+  // facilitator validates before settlement. Track as follow-up: add regex guard here
+  // for defense-in-depth. Severity: Medium - security-reviewer, 2026-03-09
   activePages.set(tabId, state);
 
   console.log(`[paperwall ${ts()}] Page detected:`, { origin, price, mode: state.mode, optimistic: state.optimistic });
@@ -813,11 +817,20 @@ export function handleMessage(
 ): boolean {
   const type = message['type'] as string | undefined;
 
-  // Sensitive operations: only allow from extension pages (popup, options)
+  // Sensitive operations: only allow from extension pages (popup, options).
+  // PAGE_HAS_PAPERWALL is intentionally excluded from this list: it is sent by
+  // the content script running on publisher pages, not the popup. The x402 Tier 1
+  // trust model intentionally accepts publisher-reported payment parameters
+  // (price, facilitatorUrl, network) as part of the protocol design — restriction
+  // of PAGE_HAS_PAPERWALL to extension origins would break the payment detection
+  // flow entirely. This is by design, not an oversight.
   const sensitiveTypes = ['CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE', 'GET_HISTORY', 'EXPORT_PRIVATE_KEY', 'IMPORT_PRIVATE_KEY'];
   if (sensitiveTypes.includes(type ?? '')) {
-    // sender.url starts with chrome-extension:// for extension pages
-    if (!sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`)) {
+    // sender.url starts with the extension scheme (chrome-extension:// on Chrome/Edge,
+    // moz-extension:// on Firefox) — getURL('') returns the correct scheme at runtime.
+    // Guard: fail-closed if getURL returns '' — startsWith('') would vacuously match any URL.
+    const extensionOrigin = chrome.runtime.getURL('');
+    if (!extensionOrigin || !sender.url?.startsWith(extensionOrigin)) {
       sendResponse({ success: false, error: 'Unauthorized sender' });
       return true;
     }
@@ -888,6 +901,20 @@ export function handleMessage(
 
   // Return true to indicate async response
   return true;
+}
+
+/** @internal Reset brute-force counter state. Use only in tests. */
+export function _resetBruteForceStateForTest(): void {
+  if (process.env.NODE_ENV !== 'test') return;
+  unlockAttempts = 0;
+  lockedUntil = 0;
+}
+
+/** @internal Reset per-tab module state. Use only in tests. */
+export function _resetPageStateForTest(): void {
+  if (process.env.NODE_ENV !== 'test') return;
+  activePages.clear();
+  paymentsInProgress.clear();
 }
 
 // ── Service Worker Registration ─────────────────────────────────────

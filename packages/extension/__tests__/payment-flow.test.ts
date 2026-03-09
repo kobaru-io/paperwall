@@ -1,35 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createStorageMock } from './helpers/storage-mock.js';
 
 // ── Chrome API Mocks ────────────────────────────────────────────────
-
-type StorageData = Record<string, unknown>;
-
-function createStorageMock() {
-  let store: StorageData = {};
-  return {
-    get: vi.fn(async (keys?: string | string[] | null) => {
-      if (!keys || keys === null) return { ...store };
-      if (typeof keys === 'string') {
-        return keys in store ? { [keys]: store[keys] } : {};
-      }
-      const result: StorageData = {};
-      for (const k of keys) {
-        if (k in store) result[k] = store[k];
-      }
-      return result;
-    }),
-    set: vi.fn(async (items: StorageData) => {
-      Object.assign(store, items);
-    }),
-    remove: vi.fn(async (keys: string | string[]) => {
-      const arr = typeof keys === 'string' ? [keys] : keys;
-      for (const k of arr) delete store[k];
-    }),
-    clear: vi.fn(async () => { store = {}; }),
-    _getStore: () => store,
-    _reset: () => { store = {}; },
-  };
-}
 
 const localStorageMock = createStorageMock();
 const sessionStorageMock = createStorageMock();
@@ -46,6 +18,7 @@ vi.stubGlobal('chrome', {
   },
   runtime: {
     id: 'test-extension-id',
+    getURL: vi.fn((path: string) => `chrome-extension://test-extension-id/${path}`),
     onMessage: { addListener: vi.fn() },
     lastError: null,
   },
@@ -90,7 +63,7 @@ vi.mock('../src/background/history.js', () => ({
   updatePaymentStatus: vi.fn(),
 }));
 
-import { handleMessage } from '../src/background/message-router.js';
+import { handleMessage, _resetPageStateForTest } from '../src/background/message-router.js';
 import { getSupported, settle, verify } from '../src/background/facilitator.js';
 import { fetchBalance } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
@@ -108,14 +81,15 @@ function sendMessage(message: Record<string, unknown>): Promise<Record<string, u
   });
 }
 
-const TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-
 async function setupUnlockedWallet(): Promise<string> {
   // Create wallet
   const result = await sendMessage({
     type: 'CREATE_WALLET',
     password: 'test-pw-123',
   });
+  if (!result.success) {
+    throw new Error(`setupUnlockedWallet: CREATE_WALLET failed: ${JSON.stringify(result)}`);
+  }
   return result.address as string;
 }
 
@@ -125,7 +99,12 @@ describe('payment-flow', () => {
   beforeEach(() => {
     localStorageMock._reset();
     sessionStorageMock._reset();
+    _resetPageStateForTest();
     vi.clearAllMocks();
+    // Restore getURL implementation after clearAllMocks wipes it
+    vi.mocked(chrome.runtime.getURL).mockImplementation((path: string) =>
+      `chrome-extension://test-extension-id/${path}`
+    );
     // Reset mock implementations for module mocks (clearAllMocks doesn't reset implementations)
     vi.mocked(fetchBalance).mockReset();
     vi.mocked(getSupported).mockReset();
@@ -365,6 +344,65 @@ describe('payment-flow', () => {
       expect(vi.mocked(settle)).not.toHaveBeenCalled();
     });
 
+    it('when facilitator does not support the page network: error contains network name', async () => {
+      await setupUnlockedWallet();
+
+      // Setup page state with network eip155:324705682
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:324705682',
+            amount: '10000',
+            asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+            payTo: '0xreceiver',
+          }],
+        },
+      });
+
+      // Sufficient balance so we reach the getSupported check
+      vi.mocked(fetchBalance).mockResolvedValueOnce({
+        raw: '50000',
+        formatted: '0.05',
+        network: 'eip155:324705682',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+        fetchedAt: Date.now(),
+      });
+
+      // Facilitator only supports a DIFFERENT network (eip155:999)
+      vi.mocked(getSupported).mockResolvedValueOnce({
+        kinds: [{
+          x402Version: 2,
+          scheme: 'exact',
+          network: 'eip155:999',
+          extra: { name: 'USD Coin', version: '2' },
+        }],
+        extensions: [],
+        signers: {},
+      });
+
+      const response = await sendMessage({
+        type: 'SIGN_AND_PAY',
+        tabId: 1,
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('eip155:324705682');
+      expect(response.error).toContain('not supported by facilitator');
+      expect(vi.mocked(createSignedPayload)).not.toHaveBeenCalled();
+      expect(vi.mocked(settle)).not.toHaveBeenCalled();
+    });
+
     it('with locked wallet: error "Wallet locked"', async () => {
       // Create wallet but lock it
       await setupUnlockedWallet();
@@ -490,11 +528,9 @@ describe('payment-flow', () => {
       expect(response.success).toBe(false);
       expect(response.error).toContain('Settlement failed');
 
-      // addPayment should be called with 'failed' status (or not called with 'confirmed')
-      if (vi.mocked(addPayment).mock.calls.length > 0) {
-        const record = vi.mocked(addPayment).mock.calls[0]![0];
-        expect(record.status).not.toBe('confirmed');
-      }
+      // In the non-optimistic failure path, addPayment is only called after a
+      // successful settle. Since settle threw, addPayment must NOT have been called.
+      expect(vi.mocked(addPayment)).not.toHaveBeenCalled();
     });
   });
 
@@ -1019,8 +1055,13 @@ describe('payment-flow', () => {
 
       await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
 
-      // Wait for background settlement
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // settleInBackground is a detached async function (not awaited before return).
+      // Poll until the second sendMessage call (PAYMENT_CONFIRMED) arrives or 2s elapses.
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        if (sendMessageToTabMock.mock.calls.length >= 2) break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
 
       expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
         type: 'PAYMENT_CONFIRMED',
@@ -1036,8 +1077,13 @@ describe('payment-flow', () => {
 
       await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
 
-      // Wait for background settlement
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // settleInBackground is a detached async function (not awaited before return).
+      // Poll until the second sendMessage call (PAYMENT_SETTLE_FAILED) arrives or 2s elapses.
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        if (sendMessageToTabMock.mock.calls.length >= 2) break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
 
       expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
         type: 'PAYMENT_SETTLE_FAILED',

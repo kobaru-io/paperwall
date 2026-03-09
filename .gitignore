@@ -53,6 +53,10 @@ packages/extension/releases/
 # -- Chrome extension --
 packages/extension/*.zip
 packages/extension/*.crx
+packages/extension/*.xpi
+
+# -- Firefox extension build artifact --
+packages/extension/dist-firefox/
 
 # -- Next.js / website --
 website/.next/

@@ -1,35 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createStorageMock } from './helpers/storage-mock.js';
 
 // ── Chrome API Mocks ────────────────────────────────────────────────
-
-type StorageData = Record<string, unknown>;
-
-function createStorageMock() {
-  let store: StorageData = {};
-  return {
-    get: vi.fn(async (keys?: string | string[] | null) => {
-      if (!keys || keys === null) return { ...store };
-      if (typeof keys === 'string') {
-        return keys in store ? { [keys]: store[keys] } : {};
-      }
-      const result: StorageData = {};
-      for (const k of keys) {
-        if (k in store) result[k] = store[k];
-      }
-      return result;
-    }),
-    set: vi.fn(async (items: StorageData) => {
-      Object.assign(store, items);
-    }),
-    remove: vi.fn(async (keys: string | string[]) => {
-      const arr = typeof keys === 'string' ? [keys] : keys;
-      for (const k of arr) delete store[k];
-    }),
-    clear: vi.fn(async () => { store = {}; }),
-    _getStore: () => store,
-    _reset: () => { store = {}; },
-  };
-}
 
 const localStorageMock = createStorageMock();
 const sessionStorageMock = createStorageMock();
@@ -41,6 +13,7 @@ vi.stubGlobal('chrome', {
   },
   runtime: {
     id: 'test-extension-id',
+    getURL: vi.fn((path: string) => `chrome-extension://test-extension-id/${path}`),
     onMessage: { addListener: vi.fn() },
     lastError: null,
   },
@@ -81,7 +54,7 @@ vi.mock('../src/background/history.js', () => ({
   updatePaymentStatus: vi.fn(),
 }));
 
-import { handleMessage } from '../src/background/message-router.js';
+import { handleMessage, _resetPageStateForTest } from '../src/background/message-router.js';
 import { getSupported, settle, verify } from '../src/background/facilitator.js';
 import { fetchBalance } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
@@ -104,6 +77,9 @@ async function setupUnlockedWallet(): Promise<string> {
     type: 'CREATE_WALLET',
     password: 'test-pw-123',
   });
+  if (!result.success) {
+    throw new Error(`setupUnlockedWallet: CREATE_WALLET failed: ${JSON.stringify(result)}`);
+  }
   return result.address as string;
 }
 
@@ -199,7 +175,12 @@ describe('x402 wire format compliance', () => {
   beforeEach(() => {
     localStorageMock._reset();
     sessionStorageMock._reset();
+    _resetPageStateForTest();
     vi.clearAllMocks();
+    // Restore getURL implementation after clearAllMocks wipes it
+    vi.mocked(chrome.runtime.getURL).mockImplementation((path: string) =>
+      `chrome-extension://test-extension-id/${path}`
+    );
     vi.mocked(fetchBalance).mockReset();
     vi.mocked(getSupported).mockReset();
     vi.mocked(verify).mockReset();

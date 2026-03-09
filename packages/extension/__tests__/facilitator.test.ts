@@ -425,80 +425,17 @@ describe('facilitator', () => {
         settle('https://[::1]', undefined, {} as never, {} as never),
       ).rejects.toThrow('private IP');
     });
-  });
 
-  describe('SSRF protection', () => {
-    it('blocks HTTP URLs', async () => {
-      await expect(getSupported('http://gateway.kobaru.io')).rejects.toThrow(
-        'HTTPS',
-      );
-    });
-
-    it('blocks localhost', async () => {
-      await expect(getSupported('https://localhost/supported')).rejects.toThrow(
-        'private IP',
-      );
-    });
-
-    it('blocks 127.0.0.1', async () => {
-      await expect(getSupported('https://127.0.0.1')).rejects.toThrow(
-        'private IP',
-      );
-    });
-
-    it('blocks private 10.x.x.x', async () => {
-      await expect(getSupported('https://10.0.0.1')).rejects.toThrow(
-        'private IP',
-      );
-    });
-
-    it('blocks private 192.168.x.x', async () => {
-      await expect(getSupported('https://192.168.1.1')).rejects.toThrow(
-        'private IP',
-      );
-    });
-
-    it('blocks IPv4-mapped IPv6 in hex form (::ffff:7f00:1)', async () => {
-      // new URL('https://[::ffff:127.0.0.1]').hostname normalizes to '::ffff:7f00:1'
-      await expect(
-        settle('https://[::ffff:7f00:1]', 'sk_key', {} as never, {} as never),
-      ).rejects.toThrow('private IP');
-    });
-
-    it('blocks IPv4-mapped IPv6 in hex form for 10.x range (::ffff:a00:1)', async () => {
-      await expect(
-        settle('https://[::ffff:a00:1]', 'sk_key', {} as never, {} as never),
-      ).rejects.toThrow('private IP');
-    });
-
-    it('blocks IPv4-mapped IPv6 in hex form for 192.168.x (::ffff:c0a8:1)', async () => {
-      await expect(
-        settle('https://[::ffff:c0a8:1]', 'sk_key', {} as never, {} as never),
-      ).rejects.toThrow('private IP');
-    });
-
-    it('blocks IPv4-mapped IPv6 in dotted form (::ffff:127.0.0.1)', async () => {
+    it('rejects IPv4-mapped IPv6 in dotted form (::ffff:127.0.0.1)', async () => {
       await expect(
         settle('https://[::ffff:127.0.0.1]', 'sk_key', {} as never, {} as never),
       ).rejects.toThrow('private IP');
     });
 
-    it('blocks IPv6 loopback (::1)', async () => {
-      await expect(getSupported('https://[::1]')).rejects.toThrow(
-        'private IP',
-      );
-    });
-
-    it('blocks IPv6 link-local (fe80::)', async () => {
+    it('rejects IPv6 link-local (fe80::)', async () => {
       await expect(getSupported('https://[fe80::1]')).rejects.toThrow(
         'private IP',
       );
-    });
-
-    it('allows valid HTTPS public URL', async () => {
-      mockFetchResponse({ kinds: [], extensions: [], signers: {} });
-      const result = await getSupported('https://gateway.kobaru.io');
-      expect(result.kinds).toEqual([]);
     });
   });
 
@@ -528,6 +465,9 @@ describe('facilitator', () => {
     it('network error returns UNKNOWN error', async () => {
       mockFetchError('Failed to fetch');
 
+      // TODO(review): assertion accepts any thrown error; consider toThrow('Failed to fetch')
+      // for more specific regression coverage.
+      // Severity: Low - ring:test-reviewer, 2026-03-09
       await expect(
         getSupported(BASE_URL),
       ).rejects.toThrow();
