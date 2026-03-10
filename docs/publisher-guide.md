@@ -2,6 +2,8 @@
 
 Add micropayments to your website so readers can pay small amounts to access your content -- no subscriptions, no ads. This guide walks you through every step.
 
+> **Tip:** Want to skip the manual setup? Generate your script tag with our setup wizard at [paperwall.app/setup](https://www.paperwall.app/setup).
+
 ---
 
 ## What is Paperwall?
@@ -16,7 +18,7 @@ Paperwall lets your readers pay tiny amounts of money (as little as one cent) to
 4. They see the price (for example, "$0.01 USDC") and click "Approve Payment"
 5. The payment happens instantly, and they can read your content
 
-Payments use USDC, a digital dollar (1 USDC = 1 US dollar) on the SKALE blockchain network. SKALE has ultra-low transaction fees, which means virtually every cent you charge goes to you.
+Payments use USDC, a digital dollar (1 USDC = 1 US dollar) on supported blockchain networks including SKALE and Base. These networks have very low transaction fees, which means virtually every cent you charge goes to you. You can accept payments on one or more networks -- Paperwall handles the details.
 
 ---
 
@@ -24,11 +26,28 @@ Payments use USDC, a digital dollar (1 USDC = 1 US dollar) on the SKALE blockcha
 
 You need two things:
 
-1. **An EVM wallet address** -- This is where you receive payments. If you don't have one, you can create one using a wallet app like [Coinbase Wallet](https://www.coinbase.com/wallet). Your wallet address looks like this: `0x1234...abcd` (a long string starting with `0x`).
+1. **An EVM wallet address** -- This is where you receive payments. If you don't have one, you can create one using a wallet app like [MetaMask](https://metamask.io), [Rainbow](https://rainbow.me), or [Coinbase Wallet](https://www.coinbase.com/wallet). Your wallet address looks like this: `0x1234...abcd` (a long string starting with `0x`).
 
 2. **Access to your website's HTML** -- You need to be able to add a `<script>` tag to your pages. If you use WordPress, Squarespace, or a similar platform, look for a "Custom HTML" or "Code injection" option in your settings.
 
-> **Important:** Paperwall is currently in testnet phase. This means you should use it with test money only, not real funds. The system works, but it hasn't been deployed to a production blockchain yet.
+---
+
+## Supported networks
+
+Paperwall supports four blockchain networks. Each network has its own USDC token contract:
+
+| Network | ID (for `data-network`) | USDC Address | Environment |
+|---------|------------------------|-------------|-------------|
+| SKALE Testnet | `eip155:324705682` | `0x2e08028E3C4c2356572E096d8EF835cD5C6030bD` | Test |
+| Base Sepolia | `eip155:84532` | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | Test |
+| SKALE Mainnet | `eip155:1187947933` | `0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20` | Production |
+| Base Mainnet | `eip155:8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | Production |
+
+**About SKALE on Base:** Paperwall uses [SKALE on Base](https://docs.skale.space/get-started/quick-start/skale-on-base), not SKALE Calypso or Europa. This is a dedicated SKALE chain bridged through Base, with very low gas fees that settle to Ethereum via Base.
+
+**Testnet vs. mainnet:** Testnet networks use play money and are perfect for trying things out. Mainnet networks use real USDC. We recommend starting with a testnet (SKALE Testnet or Base Sepolia) to verify your setup before switching to mainnet.
+
+You can accept payments on a single network (the simplest setup) or on multiple networks at once, giving readers more options. Both approaches are shown in Step 1 below.
 
 ---
 
@@ -63,6 +82,7 @@ Here is what each part means:
 | Attribute | What it does | Default |
 |-----------|-------------|---------|
 | `data-asset` | Token contract address on the target network | SKALE testnet USDC address |
+| `data-accepts` | JSON array of networks to accept payments on (mutually exclusive with `data-network`) | -- |
 | `data-mode` | Payment mode: `"client"` (extension calls facilitator) or `"server"` (your server calls facilitator) | `"client"` |
 | `data-payment-url` | Your server endpoint for server-mode payments (required when `data-mode="server"`) | -- |
 | `data-site-key` | Optional public credential for facilitator authentication | -- |
@@ -73,6 +93,41 @@ When `data-optimistic="true"` (the default), the reader gets instant content acc
 Set `data-optimistic="false"` if you need confirmed settlement before unlocking content.
 
 For details on client vs server mode and choosing the right trust level for your content, see [Understanding payment tiers](#understanding-payment-tiers).
+
+### Accepting payments on multiple networks
+
+If you want to give readers a choice of networks, use `data-accepts` instead of `data-network`. This attribute takes a JSON array listing the networks you accept:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+  data-facilitator-url="https://gateway.kobaru.io"
+  data-pay-to="YOUR_WALLET_ADDRESS"
+  data-price="10000"
+  data-accepts='[{"network":"eip155:1187947933"},{"network":"eip155:8453"}]'
+></script>
+```
+
+Each entry in the array needs a `network` value (required). You can optionally include `asset` (token contract address) and `payTo` (wallet address) per network. If you leave out `asset`, Paperwall uses the default USDC address for that network automatically. If you leave out `payTo`, it inherits from the top-level `data-pay-to`.
+
+This is useful if you want to receive payments at a different wallet address on a specific network:
+
+```html
+data-accepts='[{"network":"eip155:1187947933"},{"network":"eip155:8453","payTo":"0xDifferentAddress..."}]'
+```
+
+> **Important:** `data-network` and `data-accepts` are mutually exclusive. Use one or the other, not both.
+
+The reader's client (browser extension or agent) automatically picks the best network from your list. The selection works like this:
+
+1. Filter to the networks you advertised
+2. Check the reader's USDC balance on each
+3. Pick the highest-priority network where the reader has enough funds
+
+**Priority order:** SKALE Testnet → Base Sepolia → SKALE Mainnet → Base Mainnet.
+
+- **Testnets first:** During development and testing, testnets are preferred to avoid accidentally spending real money. If a reader has funds on both testnet and mainnet, testnet wins.
+- **SKALE before Base within each tier:** SKALE has lower per-transaction fees than Base. All else equal, the cheaper network is preferred.
+- **Priority is a tiebreaker, not a veto:** If the reader only has enough funds on Base Mainnet, that network is used -- regardless of priority.
 
 ---
 
@@ -137,6 +192,34 @@ Here is a minimal HTML page with Paperwall integrated:
 </html>
 ```
 
+### Multi-network example
+
+This example accepts payments on both SKALE Mainnet and Base Mainnet, giving readers more options:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>My Article</title>
+</head>
+<body>
+
+  <h1>The Future of Web Monetization</h1>
+  <p>This is premium content powered by Paperwall micropayments...</p>
+
+  <!-- Paperwall SDK: accepts payments on multiple networks -->
+  <script src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+    data-facilitator-url="https://gateway.kobaru.io"
+    data-pay-to="0x1234567890abcdef1234567890abcdef12345678"
+    data-price="10000"
+    data-accepts='[{"network":"eip155:1187947933"},{"network":"eip155:8453"}]'
+  ></script>
+
+</body>
+</html>
+```
+
 ---
 
 ## Advanced: using the JavaScript API
@@ -174,6 +257,32 @@ If you need more control, you can initialize Paperwall with JavaScript instead o
 </script>
 ```
 
+**Multi-network example** using the `accepts` array:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"></script>
+<script>
+  Paperwall.init({
+    facilitatorUrl: 'https://gateway.kobaru.io',
+    payTo: '0x1234567890abcdef1234567890abcdef12345678',
+    price: '10000',
+    accepts: [
+      { network: 'eip155:1187947933' },
+      { network: 'eip155:8453', payTo: '0xDifferentAddress...' }
+    ],
+    onPaymentSuccess: function (receipt) {
+      console.log('Payment confirmed on network:', receipt.network);
+      console.log('Transaction:', receipt.txHash);
+    },
+    onPaymentError: function (error) {
+      console.warn('Payment error:', error.code, error.message);
+    }
+  });
+</script>
+```
+
+When using `accepts`, the reader's client automatically selects the best network from your list based on the reader's available balance. The `network` and `accepts` options are mutually exclusive -- use one or the other.
+
 **`onPaymentSuccess` callback** receives a receipt object with:
 
 | Field | Description | Example |
@@ -184,6 +293,8 @@ If you need more control, you can initialize Paperwall with JavaScript instead o
 | `from` | The reader's wallet address | `0x9876...` |
 | `to` | Your wallet address | `0x1234...` |
 | `settledAt` | When the payment was confirmed (ISO 8601) | `2026-02-11T14:30:00Z` |
+
+> **Note:** The `network` field reflects whichever network the reader's client selected for payment. If you use `data-accepts` with multiple networks, this value tells you which network was actually used.
 
 **`onOptimisticAccess` callback** receives an info object with:
 
@@ -220,11 +331,11 @@ Error codes you might see:
 When a reader pays, the USDC goes through the following path:
 
 1. The reader's extension signs a payment authorization (the reader's private key never leaves their device)
-2. The authorization is sent to the **facilitator service**, which submits it to the SKALE blockchain
+2. The authorization is sent to the **facilitator service**, which submits it to the selected blockchain network
 3. The USDC is transferred directly from the reader's wallet address to **your** wallet address
 4. The transaction is confirmed on the blockchain
 
-There is no intermediary holding your funds. Payments go directly to the wallet address you specified in `data-pay-to`. You can check your balance using any EVM wallet that supports the SKALE network.
+There is no intermediary holding your funds. Payments go directly to the wallet address you specified in `data-pay-to`. The network used depends on what you advertised (via `data-network` or `data-accepts`) and what the reader's client selected. You can check your balance using any EVM wallet that supports the relevant network (SKALE, Base, etc.).
 
 > **Note:** The facilitator service handles settlement logistics but never holds your funds. It submits the reader's signed authorization to the blockchain, which transfers USDC directly between wallets.
 
@@ -394,6 +505,19 @@ Paperwall serves publishers at different trust levels. A $0.01 page view has dif
 ></script>
 ```
 
+Or with multiple networks:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+  data-facilitator-url="https://gateway.kobaru.io"
+  data-pay-to="0x1234567890abcdef1234567890abcdef12345678"
+  data-price="50000"
+  data-accepts='[{"network":"eip155:1187947933"},{"network":"eip155:8453"}]'
+  data-mode="server"
+  data-payment-url="https://yoursite.com/api/paperwall-payment"
+></script>
+```
+
 2. Create a backend endpoint (`/api/paperwall-payment`) that:
    - Receives the payment signature from your frontend
    - Calls the facilitator's `/verify` endpoint to check the signature is valid
@@ -407,10 +531,12 @@ Paperwall serves publishers at different trust levels. A $0.01 page view has dif
 
 ```javascript
 app.post('/api/paperwall-payment', async (req, res) => {
-  const { signature, reader, amount, nonce, validAfter, validBefore } = req.body;
+  const { signature, reader, amount, nonce, validAfter, validBefore, network } = req.body;
 
   try {
     // Step 1: Verify the signature with facilitator
+    // The `network` comes from the reader's client, which selected it
+    // from the networks you advertised via data-network or data-accepts.
     const verifyResponse = await fetch(`${facilitatorUrl}/verify`, {
       method: 'POST',
       headers: {
@@ -425,7 +551,7 @@ app.post('/api/paperwall-payment', async (req, res) => {
         nonce,
         validAfter,
         validBefore,
-        network: 'eip155:324705682'
+        network
       })
     });
 
@@ -448,7 +574,7 @@ app.post('/api/paperwall-payment', async (req, res) => {
         nonce,
         validAfter,
         validBefore,
-        network: 'eip155:324705682'
+        network
       })
     });
 
@@ -511,19 +637,19 @@ The Paperwall extension provides the same user experience in all three tiers:
 
 - Make sure readers have the Paperwall browser extension installed.
 - Check that the `data-facilitator-url` is correct: `https://gateway.kobaru.io`.
-- Check that the `data-network` is correct: `eip155:324705682` (SKALE testnet).
+- Check that `data-network` uses a supported network ID (see [Supported networks](#supported-networks)) or that `data-accepts` contains valid network entries. Remember that `data-network` and `data-accepts` are mutually exclusive -- use one or the other.
 
 ### I can't find my payments
 
-- Use a blockchain explorer for the SKALE testnet to look up your wallet address.
-- Payments appear as USDC token transfers on the SKALE network.
+- Use a blockchain explorer for the relevant network to look up your wallet address. If you accept payments on multiple networks (via `data-accepts`), payments may appear on different networks depending on which one the reader's client selected.
+- Payments appear as USDC token transfers. Check the explorer for each network you advertise.
 
 ---
 
 ## Frequently asked questions
 
 **How much does Paperwall cost me as a publisher?**
-Nothing. There are no setup fees, no monthly fees, and no percentage cuts. SKALE network has ultra-low gas fees, so readers pay virtually exactly what you charge and you receive nearly that amount.
+Nothing. There are no setup fees, no monthly fees, and no percentage cuts. All supported networks (SKALE and Base) have very low gas fees, so readers pay virtually exactly what you charge and you receive nearly that amount. Fees vary slightly by network but are minimal on all of them.
 
 **What if a reader doesn't have the extension?**
 They see your page normally, without any paywall. Paperwall is non-blocking by default -- the SDK emits a signal, but if no extension is listening, nothing happens. You can add custom logic (using the JavaScript API) to show a message or gate content for non-paying readers.
@@ -538,4 +664,4 @@ The reader's private key never leaves their device. Payments are signed locally 
 Payments cannot be processed while the facilitator is unavailable. The reader's funds remain in their wallet. No money is lost.
 
 **Can readers pay from a phone?**
-Not yet. Paperwall currently requires a desktop Chrome browser with the extension installed. Mobile support is planned for the future.
+Paperwall supports Chrome, Firefox, and Edge browsers on desktop. Firefox Android is also supported. Full mobile support for other browsers is planned for the future.

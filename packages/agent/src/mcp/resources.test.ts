@@ -89,7 +89,7 @@ describe('wallet-info resource', () => {
     const parsed = JSON.parse(result.contents[0]!.text as string);
     expect(parsed.address).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f2bD28');
     expect(parsed.network).toBe('eip155:324705682');
-    expect(parsed.networkName).toBe('SKALE Base Sepolia');
+    expect(parsed.networkName).toBe('SKALE Testnet');
   });
 
   it('returns error when no wallet', async () => {

@@ -2,6 +2,14 @@
 // Main screen after wallet is unlocked. Shows balance, address, history.
 
 import { formatUsdcFromString, formatRelativeTime } from '../../shared/format.js';
+import { getAllNetworks, isTestnet } from '../../shared/constants.js';
+
+interface NetworkBalance {
+  raw: string;
+  formatted: string;
+  network: string;
+  asset: string;
+}
 
 export function renderDashboard(
   container: HTMLElement,
@@ -43,13 +51,17 @@ export function renderDashboard(
   balanceAsset.className = 'balance-asset';
   balanceAsset.textContent = 'USDC';
 
+  // Container for network info (single network name or breakdown)
+  const networkInfoContainer = document.createElement('div');
+  networkInfoContainer.className = 'network-info-container';
+
   const refreshButton = document.createElement('button');
   refreshButton.type = 'button';
   refreshButton.className = 'btn btn-secondary btn-small';
   refreshButton.textContent = 'Refresh';
   refreshButton.setAttribute('aria-label', 'Refresh balance');
 
-  balanceSection.append(balanceLabel, balanceAmount, balanceAsset, refreshButton);
+  balanceSection.append(balanceLabel, balanceAmount, balanceAsset, networkInfoContainer, refreshButton);
 
   // Address Section
   const addressSection = document.createElement('section');
@@ -135,20 +147,105 @@ export function renderDashboard(
 
   async function loadBalance(): Promise<void> {
     balanceAmount.textContent = 'Loading...';
+    networkInfoContainer.innerHTML = '';
     refreshButton.disabled = true;
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_BALANCE',
+        type: 'GET_BALANCES_ALL_NETWORKS',
       });
 
-      if (response.success) {
-        const balance = response.balance as {
-          formatted: string;
-          asset: string;
-        };
-        balanceAmount.textContent = `$${balance.formatted}`;
-        balanceAsset.textContent = balance.asset;
+      if (response.success && response.balances) {
+        const balances = response.balances as Record<string, NetworkBalance>;
+        const allNetworks = getAllNetworks();
+
+        // Calculate which networks have non-zero balance
+        const nonZeroNetworks: Array<{ caip2: string; name: string; formatted: string; raw: string }> = [];
+        let totalRaw = 0n;
+
+        for (const [caip2, config] of allNetworks.entries()) {
+          const bal = balances[caip2];
+          if (bal) {
+            const raw = BigInt(bal.raw);
+            totalRaw += raw;
+            if (raw > 0n) {
+              nonZeroNetworks.push({
+                caip2,
+                name: config.name,
+                formatted: bal.formatted,
+                raw: bal.raw,
+              });
+            }
+          }
+        }
+
+        // Format total from raw bigint
+        const totalFormatted = formatTotal(totalRaw);
+
+        if (nonZeroNetworks.length === 0) {
+          // Case 0: No balance
+          balanceAmount.textContent = '$0.00';
+          balanceAsset.textContent = 'USDC';
+
+          const topUpButton = document.createElement('button');
+          topUpButton.type = 'button';
+          topUpButton.className = 'btn btn-secondary btn-small';
+          topUpButton.textContent = 'Top Up';
+          topUpButton.setAttribute('aria-label', 'Top up wallet balance');
+          networkInfoContainer.appendChild(topUpButton);
+        } else if (nonZeroNetworks.length === 1) {
+          // Case 1: Single network with balance
+          const net = nonZeroNetworks[0];
+          if (net) {
+            balanceAmount.textContent = `$${net.formatted}`;
+            balanceAsset.textContent = 'USDC';
+
+            const networkName = document.createElement('p');
+            networkName.className = 'balance-network-name';
+            networkName.textContent = net.name;
+            networkInfoContainer.appendChild(networkName);
+          }
+        } else {
+          // Case 2+: Multiple networks with balance
+          balanceAmount.textContent = `$${totalFormatted} total`;
+          balanceAsset.textContent = 'USDC';
+
+          const breakdown = document.createElement('div');
+          breakdown.className = 'network-breakdown';
+          breakdown.setAttribute('role', 'list');
+          breakdown.setAttribute('aria-label', 'Balance per network');
+
+          // Show ALL networks (including zero-balance ones)
+          for (const [caip2, config] of allNetworks.entries()) {
+            const bal = balances[caip2];
+            const formatted = bal ? bal.formatted : '0.00';
+
+            const row = document.createElement('div');
+            row.className = 'network-row';
+            row.setAttribute('role', 'listitem');
+
+            const nameContainer = document.createElement('span');
+            nameContainer.className = 'network-row-name';
+            nameContainer.textContent = config.name;
+
+            if (isTestnet(caip2)) {
+              const badge = document.createElement('span');
+              badge.className = 'badge-test';
+              badge.textContent = 'TEST';
+              badge.setAttribute('aria-label', 'Testnet network');
+              nameContainer.appendChild(badge);
+            }
+
+            const amount = document.createElement('span');
+            amount.className = 'network-row-amount';
+            amount.textContent = `$${formatted}`;
+
+            row.append(nameContainer, amount);
+            breakdown.appendChild(row);
+          }
+
+          networkInfoContainer.appendChild(breakdown);
+        }
       } else {
         balanceAmount.textContent = 'Error';
       }
@@ -266,3 +363,16 @@ export function renderDashboard(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Format a total balance from raw bigint (USDC 6 decimals) to display string.
+ */
+function formatTotal(raw: bigint): string {
+  const divisor = 1_000_000n;
+  const whole = raw / divisor;
+  const remainder = raw % divisor;
+  const full = remainder.toString().padStart(6, '0');
+  const trimmed = full.replace(/0+$/, '');
+  const decimal = trimmed.length < 2 ? full.slice(0, 2) : trimmed;
+  return `${whole}.${decimal}`;
+}

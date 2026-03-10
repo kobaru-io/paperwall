@@ -54,6 +54,7 @@ export const Paperwall = {
 
 // Re-export types for consumers
 export type {
+  AcceptEntry,
   PaperwallConfig,
   PaymentReceipt,
   PaymentError,

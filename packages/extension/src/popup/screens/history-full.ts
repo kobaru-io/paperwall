@@ -1,5 +1,6 @@
 import type { PaymentRecord } from '../../background/history.js';
 import { formatRelativeTime } from '../../shared/format.js';
+import { getNetwork, isTestnet } from '../../shared/constants.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -77,12 +78,24 @@ export function renderHistoryFull(
     amount.className = 'history-amount';
     amount.textContent = `$${record.formattedAmount}`;
 
+    const networkBadge = document.createElement('span');
+    networkBadge.className = 'network-badge';
+    networkBadge.textContent = formatNetworkName(record.network);
+
+    if (isTestnet(record.network)) {
+      const testBadge = document.createElement('span');
+      testBadge.className = 'badge-test';
+      testBadge.textContent = 'TEST';
+      testBadge.setAttribute('aria-label', 'Testnet network');
+      networkBadge.appendChild(testBadge);
+    }
+
     const time = document.createElement('time');
     time.className = 'history-time';
     time.dateTime = new Date(record.timestamp).toISOString();
     time.textContent = formatRelativeTime(record.timestamp);
 
-    summary.append(origin, amount, time);
+    summary.append(origin, amount, networkBadge, time);
     row.appendChild(summary);
 
     if (expandedId === record.requestId) {
@@ -145,6 +158,14 @@ export function renderHistoryFull(
 }
 
 // ── Internal Helpers ──────────────────────────────────────────────
+
+function formatNetworkName(caip2: string): string {
+  try {
+    return getNetwork(caip2).name;
+  } catch {
+    return caip2;
+  }
+}
 
 function bucketRecords(
   records: readonly PaymentRecord[],

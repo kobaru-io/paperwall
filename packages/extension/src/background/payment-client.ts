@@ -8,13 +8,13 @@ import type { PaymentPayload, PaymentRequirements } from '@x402/core/types';
 
 let client: x402Client | null = null;
 let registeredAddress: string | null = null;
-let registeredNetwork: string | null = null;
 
 /**
  * Initialize or update the x402 client with a private key.
- * Registers the EVM scheme for the given network.
+ * Registers the EVM scheme with a wildcard `eip155:*` so any EVM network
+ * is handled automatically without per-network registration calls.
  */
-export function initializePaymentClient(privateKey: string, network: string): void {
+export function initializePaymentClient(privateKey: string): void {
   const account = privateKeyToAccount(privateKey as `0x${string}`);
 
   // Create new client if needed
@@ -22,14 +22,13 @@ export function initializePaymentClient(privateKey: string, network: string): vo
     client = new x402Client();
   }
 
-  // Re-register if the address or network changed
-  if (registeredAddress !== account.address || registeredNetwork !== network) {
+  // Re-register if the address changed
+  if (registeredAddress !== account.address) {
     registerExactEvmScheme(client, {
       signer: account,
-      networks: [network as `${string}:${string}`],
+      networks: ['eip155:*' as `${string}:${string}`],
     });
     registeredAddress = account.address;
-    registeredNetwork = network;
   }
 }
 
@@ -65,5 +64,4 @@ export async function createSignedPayload(
 export function clearPaymentClient(): void {
   client = null;
   registeredAddress = null;
-  registeredNetwork = null;
 }

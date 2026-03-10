@@ -33,7 +33,7 @@ export function initMessaging(config: PaperwallConfig): void {
       facilitatorUrl: config.facilitatorUrl,
       payTo: config.payTo,
       price: config.price,
-      network: config.network,
+      network: config.network ?? '',
       mode: config.mode,
       siteKey: config.siteKey,
     },
@@ -85,7 +85,7 @@ export function initMessaging(config: PaperwallConfig): void {
       const receipt: PaymentReceipt = {
         requestId: (raw.requestId as string) ?? requestId,
         txHash: (raw.txHash as string) ?? '',
-        network: (raw.network as string) ?? config.network,
+        network: (raw.network as string) ?? config.network ?? '',
         amount: (raw.amount as string) ?? config.price,
         from: (raw.from as string) ?? '',
         to: (raw.to as string) ?? config.payTo,
@@ -191,7 +191,7 @@ async function handleServerModeSignature(
       config.onPaymentSuccess({
         requestId,
         txHash: (result.txHash as string) ?? '',
-        network: config.network,
+        network: config.network ?? '',
         amount: config.price,
         from: (payload.from as string) ?? '',
         to: config.payTo,

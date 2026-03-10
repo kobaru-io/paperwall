@@ -13,7 +13,8 @@ This document explains the **why** behind Paperwall's architecture. For the tech
 7. [Agent: Wallet Encryption and Storage](#agent-wallet-encryption-and-storage)
 8. [Optimistic Settlement: Default-On for Tier 1 & 2](#optimistic-settlement-default-on-for-tier-1--2)
 9. [Cross-Browser Extension: Architecture Decisions](#cross-browser-extension-architecture-decisions)
-10. [Other Design Decisions](#other-design-decisions)
+10. [Multi-Network Support](#multi-network-support)
+11. [Other Design Decisions](#other-design-decisions)
 
 ---
 
@@ -449,6 +450,42 @@ When the extension was ported from Chrome-only to Firefox and Edge, four design 
 
 ---
 
+## Multi-Network Support
+
+### The Decision
+
+Paperwall supports four networks: SKALE Testnet (`eip155:324705682`), Base Sepolia (`eip155:84532`), SKALE Mainnet (`eip155:1187947933`), and Base Mainnet (`eip155:8453`). Publishers declare which networks they accept; the extension and agent auto-select the best one for each payment.
+
+### Why These Four Networks
+
+**SKALE** was the original choice: EVM-compatible, ultra-low fees, making $0.01 transactions viable. Adding **Base** (Coinbase's L2) gives readers an on-ramp they may already have funds on via Coinbase and Coinbase Wallet.
+
+Having testnet and mainnet variants of both chains means:
+- Developers test end-to-end with free funds on a realistic stack
+- Publishers can accept mainnet payments without requiring readers to bridge to an unfamiliar chain
+
+### Priority Order Rationale
+
+The auto-selection priority is: SKALE Testnet → Base Sepolia → SKALE Mainnet → Base Mainnet.
+
+- **Testnets first:** during development and testing, testnet should be used preferentially to avoid accidentally spending real money. If a wallet has funds on both testnet and mainnet, testnet wins.
+- **SKALE before Base within each tier:** SKALE has lower per-transaction fees than Base. All else equal, the cheaper network is preferred.
+- **Priority is a tiebreaker, not a veto:** if the reader has a sufficient balance only on Base Mainnet, that network is used — regardless of priority.
+
+### Two-Tier Balance Cache
+
+The extension caches balances per network with a short TTL (a few seconds) to avoid making four RPC calls on every payment prompt. The cache is keyed by `(address, networkId)` so stale balance data for one network does not invalidate the others. This allows the multi-network balance display in the popup to be fast while still reflecting recent top-ups.
+
+### Why Network Selection Is Duplicated in Extension and Agent
+
+The extension (browser) and agent (Node.js CLI/server) both implement network selection independently rather than sharing a package.
+
+**The constraint:** sharing runtime logic between a Chrome extension (MV3 service worker, Web Crypto API, `chrome.*` APIs) and a Node.js process requires a package that works cleanly in both environments. At the time of implementation, the added packaging complexity of a shared `@paperwall/core` package was not justified for a ~50-line selection function.
+
+**The trade-off accepted:** the priority order and selection logic must be kept in sync manually. The logic is simple (sort by priority, filter by sufficient balance), well-tested in each package separately, and unlikely to diverge in practice. If the selection logic grows substantially (e.g., fee estimation, latency probing), extracting a shared package is the right next step.
+
+---
+
 ## Other Design Decisions
 
-*(Space for future ADRs: network choice, file-based storage vs database, etc.)*
+*(Space for future ADRs: file-based storage vs database, etc.)*

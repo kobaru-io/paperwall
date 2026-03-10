@@ -1,10 +1,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fetchBalance, clearBalanceCache } from '../src/background/balance.js';
+import { fetchBalance, fetchBalances, clearBalanceCache } from '../src/background/balance.js';
+
+// ── Chrome Storage Mock ───────────────────────────────────────────────
+const mockStorageData: Record<string, unknown> = {};
+const mockChrome = {
+  storage: {
+    local: {
+      set: vi.fn((data: Record<string, unknown>) => {
+        Object.assign(mockStorageData, data);
+        return Promise.resolve();
+      }),
+      get: vi.fn((key: string) => {
+        return Promise.resolve({ [key]: mockStorageData[key] });
+      }),
+    },
+  },
+};
+Object.assign(globalThis, { chrome: mockChrome });
 
 describe('balance', () => {
   beforeEach(() => {
     clearBalanceCache();
     vi.restoreAllMocks();
+    // Clear persistent storage mock data
+    for (const key of Object.keys(mockStorageData)) {
+      delete mockStorageData[key];
+    }
   });
 
   afterEach(() => {
@@ -148,6 +169,131 @@ describe('balance', () => {
     mockRpcError('Invalid Request');
 
     await expect(fetchBalance(TEST_ADDRESS)).rejects.toThrow('RPC error');
+  });
+
+  // ── Persistent Cache Tests ──────────────────────────────────────────
+
+  it('writes to persistent cache after successful RPC', async () => {
+    const hexBalance = '0x' + (1_000_000).toString(16).padStart(64, '0');
+    mockRpcResponse(hexBalance);
+
+    await fetchBalance(TEST_ADDRESS);
+
+    expect(mockChrome.storage.local.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        [`balance:eip155:324705682:${TEST_ADDRESS}`]: expect.objectContaining({
+          balance: '1000000',
+          timestamp: expect.any(Number) as number,
+        }),
+      }),
+    );
+  });
+
+  it('returns persistent cache when RPC fails', async () => {
+    const persistentKey = `balance:eip155:324705682:${TEST_ADDRESS}`;
+    mockStorageData[persistentKey] = { balance: '2000000', timestamp: Date.now() };
+    mockRpcError('Server error');
+
+    const result = await fetchBalance(TEST_ADDRESS);
+    expect(result.raw).toBe('2000000');
+    expect(result.formatted).toBe('2.00');
+    expect(result.network).toBe('eip155:324705682');
+    expect(result.asset).toBe('USDC');
+  });
+
+  it('throws when RPC fails and no persistent cache', async () => {
+    mockRpcError('Server error');
+
+    await expect(fetchBalance(TEST_ADDRESS)).rejects.toThrow('RPC error');
+  });
+
+  // ── fetchBalances Tests ─────────────────────────────────────────────
+
+  it('fetchBalances returns balances for multiple networks', async () => {
+    const hexBalance1 = '0x' + (1_000_000).toString(16).padStart(64, '0');
+    const hexBalance2 = '0x' + (2_000_000).toString(16).padStart(64, '0');
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: hexBalance1 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: hexBalance2 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    const results = await fetchBalances(TEST_ADDRESS, [
+      'eip155:324705682',
+      'eip155:84532',
+    ]);
+
+    expect(results.size).toBe(2);
+    expect(results.get('eip155:324705682')?.formatted).toBe('1.00');
+    expect(results.get('eip155:84532')?.formatted).toBe('2.00');
+  });
+
+  it('fetchBalances omits networks where RPC fails with no cache', async () => {
+    const hexBalance = '0x' + (1_000_000).toString(16).padStart(64, '0');
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: hexBalance }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            error: { code: -32600, message: 'Server error' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    const results = await fetchBalances(TEST_ADDRESS, [
+      'eip155:324705682',
+      'eip155:84532',
+    ]);
+
+    expect(results.size).toBe(1);
+    expect(results.has('eip155:324705682')).toBe(true);
+    expect(results.has('eip155:84532')).toBe(false);
+  });
+
+  it('fresh result overwrites cache on subsequent calls', async () => {
+    const hexBalance1 = '0x' + (1_000_000).toString(16).padStart(64, '0');
+    const hexBalance2 = '0x' + (3_000_000).toString(16).padStart(64, '0');
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: hexBalance1 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ jsonrpc: '2.0', id: 1, result: hexBalance2 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+    const result1 = await fetchBalance(TEST_ADDRESS);
+    expect(result1.formatted).toBe('1.00');
+
+    clearBalanceCache();
+
+    const result2 = await fetchBalance(TEST_ADDRESS);
+    expect(result2.formatted).toBe('3.00');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('result includes all required fields', async () => {

@@ -702,3 +702,71 @@ body {
   font-weight: 500;
 }
 .view-all-link:hover { text-decoration: underline; }
+
+/* ── Network Balance Breakdown ──────────────────────────────────── */
+
+.network-info-container {
+  margin-top: 4px;
+}
+
+.balance-network-name {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.network-breakdown {
+  margin-top: 8px;
+  width: 100%;
+  font-size: 12px;
+}
+
+.network-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--color-text-secondary);
+}
+
+.network-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.network-row-amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.network-via {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.network-badge {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-test {
+  background: #f59e0b;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}

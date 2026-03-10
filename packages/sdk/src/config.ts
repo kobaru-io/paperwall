@@ -1,3 +1,4 @@
+import type { AcceptEntry } from './types';
 import { PaperwallConfig, PaperwallError } from './types';
 
 /**
@@ -69,11 +70,35 @@ export function parseConfig(input: Partial<PaperwallConfig>): PaperwallConfig {
     throw new PaperwallError('Invalid price: must be a positive integer (smallest unit, e.g. "1000000" for $1 USDC)');
   }
 
-  if (!input.network) {
-    throw new PaperwallError('Missing required field: network');
+  if (input.network && input.accepts && input.accepts.length > 0) {
+    throw new PaperwallError('network and accepts are mutually exclusive: use one or the other');
   }
-  if (!isValidCaip2(input.network)) {
+  if (!input.network && (!input.accepts || input.accepts.length === 0)) {
+    throw new PaperwallError('Missing required field: network (or accepts for multi-network)');
+  }
+
+  if (input.network && !isValidCaip2(input.network)) {
     throw new PaperwallError('Invalid network: must be a valid CAIP-2 identifier (e.g. eip155:1)');
+  }
+
+  if (input.accepts) {
+    for (const entry of input.accepts) {
+      if (!entry.network || !isValidCaip2(entry.network)) {
+        throw new PaperwallError(
+          `Invalid accepts entry: network must be a valid CAIP-2 identifier (got "${entry.network ?? ''}")`
+        );
+      }
+      if (entry.asset !== undefined && !isValidEthAddress(entry.asset)) {
+        throw new PaperwallError(
+          `Invalid accepts entry: asset must be a valid Ethereum address (got "${entry.asset}")`
+        );
+      }
+      if (entry.payTo !== undefined && !isValidEthAddress(entry.payTo)) {
+        throw new PaperwallError(
+          `Invalid accepts entry: payTo must be a valid Ethereum address (got "${entry.payTo}")`
+        );
+      }
+    }
   }
 
   if (input.asset && !isValidEthAddress(input.asset)) {
@@ -95,6 +120,7 @@ export function parseConfig(input: Partial<PaperwallConfig>): PaperwallConfig {
     payTo: input.payTo,
     price: input.price,
     network: input.network,
+    accepts: input.accepts,
     asset: input.asset,
     mode,
     paymentUrl: input.paymentUrl,
@@ -116,7 +142,24 @@ export function parseScriptTag(scriptElement: HTMLScriptElement): PaperwallConfi
   const price = scriptElement.getAttribute('data-price');
   const network = scriptElement.getAttribute('data-network');
 
-  if (!facilitatorUrl || !payTo || !price || !network) {
+  if (!facilitatorUrl || !payTo || !price) {
+    return null;
+  }
+
+  // Parse multi-network accepts array from data-accepts JSON attribute
+  const rawAccepts = scriptElement.getAttribute('data-accepts');
+  let accepts: AcceptEntry[] | undefined;
+  if (rawAccepts) {
+    try {
+      accepts = JSON.parse(rawAccepts) as AcceptEntry[];
+    } catch {
+      // Malformed JSON -- pass empty array so parseConfig validation catches it
+      accepts = [];
+    }
+  }
+
+  // If neither network nor accepts is provided, return null
+  if (!network && !accepts) {
     return null;
   }
 
@@ -134,7 +177,8 @@ export function parseScriptTag(scriptElement: HTMLScriptElement): PaperwallConfi
     facilitatorUrl,
     payTo,
     price,
-    network,
+    network: network ?? undefined,
+    accepts,
     asset,
     mode,
     paymentUrl,

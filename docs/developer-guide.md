@@ -31,7 +31,7 @@ graph LR
 
     subgraph "External Services"
         Fac["Facilitator<br/>Service<br/>/supported<br/>/settle"]
-        BC["SKALE Network<br/>(blockchain)"]
+        BC["SKALE / Base<br/>(blockchain)"]
 
         Fac --> BC
     end
@@ -121,7 +121,7 @@ paperwall/
             stats.ts        # Stats tab: time range selector, sparkline, top sites, bar chart
             settings.ts     # Settings tab: export/import key, create wallet, about
         shared/             # Shared between background, content, popup
-          constants.ts      # Network configs (SKALE testnet/mainnet)
+          constants.ts      # Network configs (SKALE testnet/mainnet, Base Sepolia/mainnet)
           format.ts         # USDC formatting (smallest unit -> human-readable)
       __tests__/            # Vitest unit tests
       dist/                 # Built extension (load this in Chrome)
@@ -539,7 +539,7 @@ paperwall wallet create
 
 **Insufficient balance:**
 
-Fund your wallet with USDC on SKALE Base Sepolia testnet. See [Network Configuration](#network-configuration) in demo/README.md for faucet links and bridging instructions.
+Fund your wallet with USDC on a supported testnet (SKALE Testnet or Base Sepolia). See [Network Configuration](#network-configuration) in demo/README.md for faucet links and bridging instructions.
 
 ---
 
@@ -707,6 +707,54 @@ Log entries are prefixed with `[paperwall <ISO timestamp>]` and include:
 The regular browser console (F12 on a page) shows SDK-level messages from the content script, but all wallet and payment logic runs in the service worker.
 
 ## Key technical decisions
+
+### Multi-network configuration
+
+Paperwall supports four networks. Publishers can accept payment on any or all of them.
+
+| Network | CAIP-2 | Type |
+|---------|--------|------|
+| SKALE Testnet | `eip155:324705682` | Testnet |
+| Base Sepolia | `eip155:84532` | Testnet |
+| SKALE Mainnet | `eip155:1187947933` | Mainnet |
+| Base Mainnet | `eip155:8453` | Mainnet |
+
+**Priority order (extension and agent auto-select):** SKALE Testnet → Base Sepolia → SKALE Mainnet → Base Mainnet. The payer's available balance on each network determines which is selected; priority breaks ties.
+
+**SDK: `data-accepts` attribute (multi-network)**
+
+```html
+<script src="..."
+  data-pay-to="0xYOUR_ADDRESS"
+  data-price="10000"
+  data-accepts='[
+    {"network":"eip155:324705682","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},
+    {"network":"eip155:84532","token":"0x036CbD53842c5426634e7929541eC2318f3dCF7e"},
+    {"network":"eip155:1187947933","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},
+    {"network":"eip155:8453","token":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}
+  ]'
+></script>
+```
+
+**SDK: `accepts` JS API (multi-network)**
+
+```typescript
+Paperwall.init({
+  facilitatorUrl: 'https://gateway.kobaru.io',
+  payTo: '0xYOUR_ADDRESS',
+  price: '10000',
+  accepts: [
+    { network: 'eip155:324705682', token: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD' },
+    { network: 'eip155:84532',     token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+  ],
+});
+```
+
+`network` and `accepts` are mutually exclusive. `data-network` / `network` (single-network) is still supported for backwards compatibility.
+
+**Extension:** Checks balances on all configured networks and selects the best one automatically. The popup balance display shows balances across all networks. Payments made on a testnet network show a **TEST** badge in the payment history.
+
+**Agent CLI:** `paperwall wallet balance` lists balances on all four networks. `paperwall fetch <url>` auto-selects a network from the publisher's signal. Use `--network eip155:8453` to force a specific network.
 
 ### Why SKALE network?
 

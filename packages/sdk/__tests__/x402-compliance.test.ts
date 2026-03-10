@@ -11,6 +11,11 @@ const VALID_CONFIG: PaperwallConfig = {
   mode: 'client',
 };
 
+const VALID_CONFIG_WITH_ASSET: PaperwallConfig = {
+  ...VALID_CONFIG,
+  asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+};
+
 function getMetaTag(): HTMLMetaElement | null {
   return document.querySelector('meta[name="x402-payment-required"]');
 }
@@ -65,10 +70,16 @@ describe('x402 SDK signal compliance', () => {
       expect(signal.accepts[0].network).toMatch(/^[a-z0-9]+:[a-zA-Z0-9]+$/);
     });
 
-    it('has asset field', () => {
-      emitSignal(VALID_CONFIG);
+    it('has asset field when config.asset is provided', () => {
+      emitSignal(VALID_CONFIG_WITH_ASSET);
       const signal = decodeSignal(getMetaTag()!);
       expect(signal.accepts[0].asset).toBe('0x2e08028E3C4c2356572E096d8EF835cD5C6030bD');
+    });
+
+    it('omits asset field when config.asset is not provided', () => {
+      emitSignal(VALID_CONFIG);
+      const signal = decodeSignal(getMetaTag()!);
+      expect(signal.accepts[0].asset).toBeUndefined();
     });
 
     it('has amount field', () => {
@@ -86,7 +97,7 @@ describe('x402 SDK signal compliance', () => {
 
   describe('type compatibility with @x402/core', () => {
     it('PaymentRequiredSignal is structurally compatible with PaymentRequired', () => {
-      emitSignal(VALID_CONFIG);
+      emitSignal(VALID_CONFIG_WITH_ASSET);
       const signal = decodeSignal(getMetaTag()!);
 
       // @x402/core PaymentRequired requires: x402Version, resource { url, description, mimeType }, accepts[]

@@ -9,6 +9,13 @@ export interface BalanceResult {
   readonly fetchedAt: number;
 }
 
+// ── Persistent Cache ────────────────────────────────────────────────
+
+interface PersistentCacheEntry {
+  balance: string;
+  timestamp: number;
+}
+
 // ── In-Memory Cache ─────────────────────────────────────────────────
 
 interface CacheEntry {
@@ -21,6 +28,41 @@ const balanceCache = new Map<string, CacheEntry>();
 
 export function clearBalanceCache(): void {
   balanceCache.clear();
+}
+
+// ── Persistent Cache Helpers ────────────────────────────────────────
+
+function persistentCacheKey(network: string, address: string): string {
+  return `balance:${network}:${address}`;
+}
+
+function writePersistentCache(
+  network: string,
+  address: string,
+  balance: string,
+  timestamp: number,
+): void {
+  const key = persistentCacheKey(network, address);
+  const entry: PersistentCacheEntry = { balance, timestamp };
+  void chrome.storage.local.set({ [key]: entry });
+}
+
+async function readPersistentCache(
+  network: string,
+  address: string,
+): Promise<PersistentCacheEntry | undefined> {
+  const key = persistentCacheKey(network, address);
+  const stored: Record<string, unknown> = await chrome.storage.local.get(key);
+  const raw = stored[key];
+  if (
+    raw !== null &&
+    typeof raw === 'object' &&
+    typeof (raw as Record<string, unknown>)['balance'] === 'string' &&
+    typeof (raw as Record<string, unknown>)['timestamp'] === 'number'
+  ) {
+    return raw as PersistentCacheEntry;
+  }
+  return undefined;
 }
 
 // ── Balance Fetching ────────────────────────────────────────────────
@@ -66,6 +108,20 @@ export async function fetchBalance(
   };
 
   if (json.error) {
+    // Try persistent cache as fallback
+    const entry = await readPersistentCache(network, address);
+    if (entry) {
+      const cachedBalance = BigInt(entry.balance);
+      const result: BalanceResult = {
+        raw: entry.balance,
+        formatted: formatUsdc(cachedBalance),
+        network,
+        asset: 'USDC',
+        fetchedAt: entry.timestamp,
+      };
+      balanceCache.set(cacheKey, { result, timestamp: entry.timestamp });
+      return result;
+    }
     throw new Error(`RPC error: ${json.error.message}`);
   }
 
@@ -84,8 +140,33 @@ export async function fetchBalance(
   };
 
   balanceCache.set(cacheKey, { result, timestamp: now });
+  writePersistentCache(network, address, balance.toString(), now);
 
   return result;
+}
+
+// ── Multi-Network Balance Fetching ──────────────────────────────────
+
+export async function fetchBalances(
+  address: string,
+  networks: string[],
+): Promise<Map<string, BalanceResult>> {
+  const results = new Map<string, BalanceResult>();
+  const settlements = await Promise.allSettled(
+    networks.map((network) => fetchBalance(address, network)),
+  );
+
+  for (let i = 0; i < networks.length; i++) {
+    const settlement = settlements[i];
+    if (settlement && settlement.status === 'fulfilled') {
+      const network = networks[i];
+      if (network) {
+        results.set(network, settlement.value);
+      }
+    }
+  }
+
+  return results;
 }
 
 // Formatting functions moved to shared/format.ts

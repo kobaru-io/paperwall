@@ -38,6 +38,7 @@ vi.mock('../src/background/facilitator.js', () => ({
 
 vi.mock('../src/background/balance.js', () => ({
   fetchBalance: vi.fn(),
+  fetchBalances: vi.fn(),
   clearBalanceCache: vi.fn(),
 }));
 
@@ -56,7 +57,7 @@ vi.mock('../src/background/history.js', () => ({
 
 import { handleMessage, _resetPageStateForTest } from '../src/background/message-router.js';
 import { getSupported, settle, verify } from '../src/background/facilitator.js';
-import { fetchBalance } from '../src/background/balance.js';
+import { fetchBalance, fetchBalances } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
 import { addPayment } from '../src/background/history.js';
 
@@ -182,11 +183,28 @@ describe('x402 wire format compliance', () => {
       `chrome-extension://test-extension-id/${path}`
     );
     vi.mocked(fetchBalance).mockReset();
+    vi.mocked(fetchBalances).mockReset();
     vi.mocked(getSupported).mockReset();
     vi.mocked(verify).mockReset();
     vi.mocked(settle).mockReset();
     vi.mocked(createSignedPayload).mockReset();
     vi.mocked(addPayment).mockReset();
+
+    // Default fetchBalances mock: delegates to fetchBalance for each network
+    vi.mocked(fetchBalances).mockImplementation(async (address: string, networks: string[]) => {
+      const results = new Map<string, { raw: string; formatted: string; network: string; asset: string; fetchedAt: number }>();
+      const settlements = await Promise.allSettled(
+        networks.map((network) => fetchBalance(address, network)),
+      );
+      for (let i = 0; i < networks.length; i++) {
+        const settlement = settlements[i];
+        const network = networks[i];
+        if (settlement && settlement.status === 'fulfilled' && settlement.value && network) {
+          results.set(network, settlement.value);
+        }
+      }
+      return results;
+    });
   });
 
   describe('verify() wire format', () => {

@@ -20,14 +20,26 @@ export interface PaymentOption {
   readonly network: string;
   /** Payment amount in smallest unit (e.g. USDC micro-units). */
   readonly amount: string;
-  /** Token contract address, e.g. "0x2e08028E3C4c2356572E096d8EF835cD5C6030bD". */
-  readonly asset: string;
-  /** Ethereum address to receive payment. */
-  readonly payTo: string;
+  /** Token contract address (optional -- client resolves from registry if omitted). */
+  readonly asset?: string;
+  /** Ethereum address to receive payment (optional -- inherits from top-level payTo if omitted). */
+  readonly payTo?: string;
   /** Maximum timeout in seconds for the payment (optional). */
   readonly maxTimeoutSeconds?: number;
   /** Extra data for the payment option (optional). */
   readonly extra?: Record<string, unknown>;
+}
+
+/**
+ * A single network entry for multi-network signal emission.
+ */
+export interface AcceptEntry {
+  /** CAIP-2 network identifier, e.g. "eip155:8453". */
+  readonly network: string;
+  /** Token contract address (optional -- client resolves from registry if omitted). */
+  readonly asset?: string;
+  /** Ethereum address to receive payment (optional -- inherits from top-level payTo if omitted). */
+  readonly payTo?: string;
 }
 
 /**
@@ -62,13 +74,15 @@ export interface PaperwallConfig {
   payTo: string;
   /** Payment amount in smallest unit. */
   price: string;
-  /** CAIP-2 network identifier. */
-  network: string;
+  /** CAIP-2 network identifier. Mutually exclusive with accepts. */
+  network?: string;
+  /** Multi-network configuration. Mutually exclusive with network. */
+  accepts?: AcceptEntry[];
   /** Payment mode: "client" (extension pays) or "server" (publisher server verifies). */
   mode: 'client' | 'server';
   /** Required when mode is "server" -- URL for server-side payment verification. */
   paymentUrl?: string;
-  /** Token contract address (defaults to SKALE testnet USDC). */
+  /** Token contract address (optional — client resolves USDC address from registry if omitted). */
   asset?: string;
   /** Optional site key for facilitator authentication. */
   siteKey?: string;

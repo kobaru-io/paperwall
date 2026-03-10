@@ -66,6 +66,18 @@ const SETTLE_RESPONSE = {
 // Well-known Hardhat test key
 const TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
+/**
+ * Build an RPC response mock for balance check (eth_call returning USDC balance).
+ * Used by auto-select mode tests that need a balance > 0 to proceed past selectNetwork.
+ */
+function makeBalanceRpcResponse(balanceSmallest: number = 5_000_000): Response {
+  const balanceHex = '0x' + balanceSmallest.toString(16).padStart(64, '0');
+  return new Response(
+    JSON.stringify({ jsonrpc: '2.0', id: 1, result: balanceHex }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
 describe('fetchWithPayment', () => {
   let tmpDir: string;
   let originalHome: string | undefined;
@@ -1326,5 +1338,202 @@ Paperwall.init({
       expect(serverKeys).toEqual(fallbackKeys);
       expect(clientKeys).toEqual(EXPECTED_PAYMENT_KEYS);
     });
+  });
+});
+
+// -- Multi-network selection tests ---
+
+describe('fetchWithPayment multi-network', () => {
+  let tmpDir: string;
+  let originalHome: string | undefined;
+  let originalPrivateKey: string | undefined;
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'paperwall-multinetwork-test-'));
+    originalHome = process.env['HOME'];
+    originalPrivateKey = process.env['PAPERWALL_PRIVATE_KEY'];
+
+    process.env['HOME'] = tmpDir;
+    process.env['PAPERWALL_PRIVATE_KEY'] = TEST_PRIVATE_KEY;
+
+    // Create wallet and budget files
+    const budgetDir = path.join(tmpDir, '.paperwall');
+    fs.mkdirSync(budgetDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(budgetDir, 'budget.json'),
+      JSON.stringify({ perRequestMax: '1.00', dailyMax: '5.00', totalMax: '50.00' }),
+    );
+    // Create a wallet.json for getBalance to read
+    fs.writeFileSync(
+      path.join(budgetDir, 'wallet.json'),
+      JSON.stringify({
+        address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+        encryptedKey: '',
+        keySalt: '',
+        keyIv: '',
+        networkId: 'eip155:324705682',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    process.env['HOME'] = originalHome;
+    if (originalPrivateKey !== undefined) {
+      process.env['PAPERWALL_PRIVATE_KEY'] = originalPrivateKey;
+    } else {
+      delete process.env['PAPERWALL_PRIVATE_KEY'];
+    }
+    globalThis.fetch = originalFetch;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Build a multi-network meta tag HTML with two accepted networks.
+   */
+  function makeMultiNetworkHtml(): string {
+    const payload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      siteKey: 'pwk_test_multi',
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        },
+        {
+          scheme: 'exact',
+          network: 'eip155:84532',
+          amount: '10000',
+          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        },
+      ],
+    };
+    return `<html><head><meta name="x402-payment-required" content="${encodeMetaTag(payload)}"></head><body>Content</body></html>`;
+  }
+
+  function makeRpcResponse(balanceHex: string): Response {
+    return new Response(
+      JSON.stringify({ jsonrpc: '2.0', id: 1, result: balanceHex }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
+  it('should auto-select highest priority network with sufficient balance', async () => {
+    const multiHtml = makeMultiNetworkHtml();
+    // SKALE Testnet (priority 0) has balance, Base Sepolia (priority 1) also has balance
+    // Should pick SKALE Testnet
+    const fetchSpy = vi.fn()
+      // 1. Initial page fetch
+      .mockResolvedValueOnce(new Response(multiHtml, { status: 200, headers: { 'Content-Type': 'text/html' } }))
+      // 2. getBalance for eip155:324705682 (SKALE Testnet)
+      .mockResolvedValueOnce(makeRpcResponse('0x' + (5_000_000).toString(16)))
+      // 3. getBalance for eip155:84532 (Base Sepolia)
+      .mockResolvedValueOnce(makeRpcResponse('0x' + (3_000_000).toString(16)))
+      // 4. GET /supported
+      .mockResolvedValueOnce(new Response(JSON.stringify(SUPPORTED_RESPONSE), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      // 5. POST /settle
+      .mockResolvedValueOnce(new Response(JSON.stringify(SETTLE_RESPONSE), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    globalThis.fetch = fetchSpy;
+
+    const result = await fetchWithPayment('https://example.com/multi', { optimistic: false });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected ok');
+    expect(result.payment?.network).toBe('eip155:324705682');
+  });
+
+  it('should force specified network with --network flag', async () => {
+    const multiHtml = makeMultiNetworkHtml();
+    const baseSupportedResponse = {
+      kinds: [{
+        scheme: 'exact',
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        extra: { name: 'USDC', version: '2', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+      }],
+    };
+    const baseSettleResponse = {
+      success: true,
+      transaction: '0xbase_sepolia_tx_hash',
+      network: 'eip155:84532',
+    };
+
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(new Response(multiHtml, { status: 200, headers: { 'Content-Type': 'text/html' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(baseSupportedResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(baseSettleResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    globalThis.fetch = fetchSpy;
+
+    const result = await fetchWithPayment('https://example.com/multi', { network: 'eip155:84532', optimistic: false });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected ok');
+    expect(result.payment?.network).toBe('eip155:84532');
+  });
+
+  it('should error when --network specifies unsupported network (publisher does not accept)', async () => {
+    const singleNetworkPayload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:324705682',
+        amount: '10000',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+        payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      }],
+    };
+    const html = `<html><head><meta name="x402-payment-required" content="${encodeMetaTag(singleNetworkPayload)}"></head><body>Content</body></html>`;
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+
+    const result = await fetchWithPayment('https://example.com/premium', { network: 'eip155:84532', optimistic: false });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected not ok');
+    expect(result.error).toBe('unsupported_network');
+    expect(result.message).toContain('does not accept');
+  });
+
+  it('should error when --network specifies unknown network (not in registry)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(makeMultiNetworkHtml(), { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+
+    const result = await fetchWithPayment('https://example.com/premium', { network: 'eip155:999999', optimistic: false });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected not ok');
+    expect(result.error).toBe('unsupported_network');
+    expect(result.message).toContain('Unknown network');
+  });
+
+  it('should return error when all networks have insufficient balance (auto-select mode)', async () => {
+    const multiHtml = makeMultiNetworkHtml();
+    const fetchSpy = vi.fn()
+      // 1. Initial page fetch
+      .mockResolvedValueOnce(new Response(multiHtml, { status: 200, headers: { 'Content-Type': 'text/html' } }))
+      // 2. getBalance for eip155:324705682 (zero balance)
+      .mockResolvedValueOnce(makeRpcResponse('0x0'))
+      // 3. getBalance for eip155:84532 (zero balance)
+      .mockResolvedValueOnce(makeRpcResponse('0x0'));
+    globalThis.fetch = fetchSpy;
+
+    const result = await fetchWithPayment('https://example.com/multi', { optimistic: false });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected not ok');
+    expect(result.error).toBe('no_balance');
+    expect(result.message).toContain('Insufficient balance');
   });
 });

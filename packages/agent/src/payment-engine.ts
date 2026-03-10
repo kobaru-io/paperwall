@@ -12,14 +12,16 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { wrapFetchWithPayment, x402Client, decodePaymentResponseHeader } from '@x402/fetch';
 import { ExactEvmScheme, toClientEvmSigner } from '@x402/evm';
 import { parseMetaTag, parseScriptTag, parseInitCall } from './meta-tag.js';
+import type { AcceptedPayment } from './meta-tag.js';
 import { getSupported, settle } from './facilitator.js';
 import { submitPayment } from './publisher-client.js';
-import { resolvePrivateKey } from './wallet.js';
+import { resolvePrivateKey, getBalance } from './wallet.js';
 import { checkBudget, smallestToUsdc } from './budget.js';
 import { appendPayment } from './history.js';
 import { acquireLock } from './storage.js';
 import { log } from './logger.js';
-import { getExpectedAsset } from './networks.js';
+import { getExpectedAsset, getNetwork } from './networks.js';
+import { selectNetwork } from './network-selector.js';
 
 export interface FetchOptions {
   readonly maxPrice?: string;
@@ -148,8 +150,7 @@ export async function fetchWithPayment(
   }
 
   // Step 5: Meta tag found — handle payment
-  const accept = metaTag.accepts[0];
-  if (!accept) {
+  if (metaTag.accepts.length === 0) {
     return {
       ok: false,
       error: 'invalid_meta_tag',
@@ -158,9 +159,16 @@ export async function fetchWithPayment(
     };
   }
 
-  log(`Payment detected: ${smallestToUsdc(accept.amount)} USDC (${metaTag.mode} mode)`);
+  // Step 5a: Resolve the best network to use
+  const resolvedAccept = await resolvePaymentNetwork(url, metaTag.accepts, options);
+  if (!resolvedAccept.ok) {
+    return resolvedAccept.result;
+  }
+  const accept = resolvedAccept.accept;
 
-  // Step 5a: Check budget under lock (prevents TOCTOU race in concurrent requests)
+  log(`Payment detected: ${smallestToUsdc(accept.amount)} USDC on ${accept.network} (${metaTag.mode} mode)`);
+
+  // Step 5b: Check budget under lock (prevents TOCTOU race in concurrent requests)
   const releaseLock = await acquireLock('budget');
   try {
     const budgetCheck = checkBudget(accept.amount, options.maxPrice);
@@ -199,6 +207,209 @@ export async function fetchWithPayment(
     error: 'unsupported_mode',
     message: `Payment mode "${metaTag.mode}" is not supported`,
     url,
+  };
+}
+
+/**
+ * Resolved accept entry with all fields guaranteed present.
+ */
+interface ResolvedAccept {
+  readonly network: string;
+  readonly amount: string;
+  readonly asset: string;
+  readonly payTo: string;
+}
+
+type ResolveResult =
+  | { readonly ok: true; readonly accept: ResolvedAccept }
+  | { readonly ok: false; readonly result: FetchError };
+
+/**
+ * Resolve which network and payment parameters to use.
+ *
+ * - If `--network` is specified, force that network and verify the publisher accepts it.
+ * - Otherwise, fetch balances for all advertised networks and pick the best via selectNetwork().
+ */
+async function resolvePaymentNetwork(
+  url: string,
+  accepts: readonly AcceptedPayment[],
+  options: FetchOptions,
+): Promise<ResolveResult> {
+  // Extract the amount from the first accept entry (all entries share the same amount)
+  const firstAccept = accepts[0];
+  if (!firstAccept) {
+    return {
+      ok: false,
+      result: { ok: false, error: 'invalid_meta_tag', message: 'No accepted payment terms', url },
+    };
+  }
+  const amount = firstAccept.amount;
+
+  // Find a top-level payTo from the accepts entries (used as default)
+  const defaultPayTo = accepts.find((a) => a.payTo !== undefined)?.payTo ?? '';
+
+  if (!defaultPayTo) {
+    return {
+      ok: false,
+      result: {
+        ok: false,
+        error: 'invalid_meta_tag',
+        message: 'No payTo address available in payment signal',
+        url,
+      },
+    };
+  }
+
+  if (options.network) {
+    // Forced mode: verify publisher accepts this network
+    try {
+      getNetwork(options.network);
+    } catch {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          error: 'unsupported_network',
+          message: `Unknown network: ${options.network}. Use a supported CAIP-2 network identifier.`,
+          url,
+        },
+      };
+    }
+
+    const matchingAccept = accepts.find((a) => a.network === options.network);
+    if (!matchingAccept) {
+      const advertisedNetworks = accepts.map((a) => a.network).join(', ');
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          error: 'unsupported_network',
+          message: `Publisher does not accept network ${options.network}. Accepted: ${advertisedNetworks}`,
+          url,
+        },
+      };
+    }
+
+    const resolvedAsset = matchingAccept.asset ?? getExpectedAsset(options.network);
+    if (!resolvedAsset) {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          error: 'asset_mismatch',
+          message: `Cannot resolve USDC asset address for network ${options.network}`,
+          url,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      accept: {
+        network: options.network,
+        amount: matchingAccept.amount,
+        asset: resolvedAsset,
+        payTo: matchingAccept.payTo ?? defaultPayTo,
+      },
+    };
+  }
+
+  // Auto-selection mode: fetch balances for advertised networks
+  const networkIds = [...new Set(accepts.map((a) => a.network))];
+  const balances = new Map<string, { raw: string }>();
+  let successfulBalanceFetches = 0;
+
+  // Fetch balances in parallel
+  const balanceResults = await Promise.allSettled(
+    networkIds.map(async (networkId) => {
+      try {
+        const balanceInfo = await getBalance(networkId);
+        return { networkId, raw: balanceInfo.balance, success: true };
+      } catch {
+        return { networkId, raw: '0', success: false };
+      }
+    }),
+  );
+
+  for (const result of balanceResults) {
+    if (result.status === 'fulfilled') {
+      balances.set(result.value.networkId, { raw: result.value.raw });
+      if (result.value.success) {
+        successfulBalanceFetches++;
+      }
+    }
+  }
+
+  // Map accepts to the format expected by selectNetwork
+  const acceptEntries = accepts.map((a) => ({
+    network: a.network,
+    asset: a.asset,
+    payTo: a.payTo,
+  }));
+
+  const selected = selectNetwork(acceptEntries, balances, amount, defaultPayTo);
+  if (!selected) {
+    // Check if the issue is unknown networks (no asset resolution) or just insufficient balance
+    const hasKnownNetwork = accepts.some((a) => getExpectedAsset(a.network) !== null);
+    if (!hasKnownNetwork) {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          error: 'no_viable_network',
+          message: 'No supported network with sufficient balance found',
+          url,
+        },
+      };
+    }
+
+    // Only return no_balance if we successfully checked at least one balance
+    // If all balance fetches failed, fall through to first accept entry (best-effort)
+    if (successfulBalanceFetches > 0) {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          error: 'no_balance',
+          message: 'Insufficient balance on all advertised networks',
+          url,
+        },
+      };
+    }
+
+    // All balance fetches failed — fall back to first accept entry (best-effort)
+    const fallbackAsset = firstAccept.asset ?? getExpectedAsset(firstAccept.network);
+    if (!fallbackAsset) {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          error: 'no_viable_network',
+          message: 'No supported network with sufficient balance found',
+          url,
+        },
+      };
+    }
+    log('Balance check unavailable — proceeding with best-effort network selection');
+    return {
+      ok: true,
+      accept: {
+        network: firstAccept.network,
+        amount,
+        asset: fallbackAsset,
+        payTo: firstAccept.payTo ?? defaultPayTo,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    accept: {
+      network: selected.network,
+      amount,
+      asset: selected.asset,
+      payTo: selected.payTo,
+    },
   };
 }
 
@@ -282,8 +493,7 @@ async function handle402Fallback(
 
   // Set up x402Client with hooks for budget gate and payment capture
   const client = new x402Client()
-    .register('eip155:324705682', new ExactEvmScheme(signer))
-    .register('eip155:1187947933', new ExactEvmScheme(signer))
+    .register('eip155:*', new ExactEvmScheme(signer))
     .onBeforePaymentCreation(async (context) => {
       // Budget gate: check if the payment amount is within limits
       const requirements = context.selectedRequirements;
@@ -447,7 +657,15 @@ async function handleClientMode(
   try {
     // Validate asset matches network
     const expectedAsset = getExpectedAsset(accept.network);
-    if (expectedAsset && expectedAsset.toLowerCase() !== accept.asset.toLowerCase()) {
+    if (!expectedAsset) {
+      return {
+        ok: false,
+        error: 'unsupported_network',
+        message: `Unknown network ${accept.network} — cannot resolve expected asset`,
+        url,
+      };
+    }
+    if (expectedAsset.toLowerCase() !== accept.asset.toLowerCase()) {
       return {
         ok: false,
         error: 'asset_mismatch',
@@ -468,7 +686,7 @@ async function handleClientMode(
     const account = privateKeyToAccount(privateKey);
     const signer = toClientEvmSigner(account);
     const client = new x402Client()
-      .register(accept.network as `${string}:${string}`, new ExactEvmScheme(signer));
+      .register('eip155:*', new ExactEvmScheme(signer));
 
     // Step 4d: Sign via x402 library (EIP-3009 TransferWithAuthorization)
     log('Signing EIP-712 authorization...');
@@ -637,7 +855,15 @@ async function handleServerMode(
   try {
     // Validate asset matches network
     const expectedAsset = getExpectedAsset(accept.network);
-    if (expectedAsset && expectedAsset.toLowerCase() !== accept.asset.toLowerCase()) {
+    if (!expectedAsset) {
+      return {
+        ok: false,
+        error: 'unsupported_network',
+        message: `Unknown network ${accept.network} — cannot resolve expected asset`,
+        url,
+      };
+    }
+    if (expectedAsset.toLowerCase() !== accept.asset.toLowerCase()) {
       return {
         ok: false,
         error: 'asset_mismatch',
@@ -658,7 +884,7 @@ async function handleServerMode(
     const account = privateKeyToAccount(privateKey);
     const signer = toClientEvmSigner(account);
     const client = new x402Client()
-      .register(accept.network as `${string}:${string}`, new ExactEvmScheme(signer));
+      .register('eip155:*', new ExactEvmScheme(signer));
 
     // Step 3: Sign via x402 library (EIP-3009 TransferWithAuthorization)
     log('Signing EIP-712 authorization...');

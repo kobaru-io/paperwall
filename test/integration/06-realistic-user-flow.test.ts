@@ -195,7 +195,7 @@ describe('Realistic User Flow Integration', () => {
         title: 'Payment Required',
         amount: '0.05',
         currency: 'USDC',
-        network: 'SKALE Base Sepolia',
+        network: 'SKALE Testnet',
         buttons: ['Approve Payment', 'Reject'],
       };
 

@@ -7,9 +7,9 @@
 
 </div>
 
-Paperwall is an open-source micropayment system that makes it easy for readers (humans and agents) to unlock content for just pennies. By using crypto (currently USDC on SKALE), payments can be as low as $0.01. It works for everyone: publishers get a single script tag, readers get a quick browser extension, AI agents use a batteries-included CLI tool or A2A server. It's that simple.
+Paperwall is an open-source micropayment system that makes it easy for readers (humans and agents) to unlock content for just pennies. By using crypto (currently USDC on SKALE and Base), payments can be as low as $0.01. It works for everyone: publishers get a single script tag, readers get a quick browser extension, AI agents use a batteries-included CLI tool or A2A server. It's that simple.
 
-> **Status:** Testnet (v0.2.0). Paperwall is currently deployed on the SKALE testnet. Use test funds only. Mainnet support coming soon.
+> **Status:** v0.3.0. Paperwall supports SKALE Testnet and Base Sepolia for testing, and SKALE Mainnet and Base Mainnet for production. Start with testnet funds before going live.
 >
 > **Website:** [www.paperwall.app](https://www.paperwall.app) | **Roadmap:** [What's next](docs/roadmap.md)
 
@@ -36,7 +36,7 @@ The existing alternatives have critical flaws:
 
 Three enablers now make micropayments viable:
 
-1. **SKALE Network** -- EVM-compatible chain with ultra-low fees, making $0.01 transactions economically viable
+1. **SKALE and Base Networks** -- EVM-compatible chains with ultra-low fees, making $0.01 transactions economically viable
 2. **x402 protocol** -- standardized HTTP 402 Payment Required flow for web-native micropayments
 3. **Kobaru facilitator** -- the engine that handles verification and settlement, hiding all the blockchain complexity from users and publishers.
 
@@ -76,7 +76,7 @@ sequenceDiagram
 
 **Key features:**
 
-- **Ultra-low fees** -- SKALE network has ultra-low transaction costs
+- **Ultra-low fees** -- SKALE and Base networks have ultra-low transaction costs
 - **True micropayments** -- charge as little as $0.001 per article
 - **No account signup** -- readers just install the extension and set a password
 - **Private key never leaves your device** -- wallet is encrypted locally (multiple modes: password, env-injected for containers, machine-bound for local)
@@ -171,6 +171,20 @@ You want to understand the architecture, run the project locally, or submit a pu
 Add this script tag to any page you want to paywall:
 
 ```html
+<!-- Multi-network (recommended): accept payment on whichever network the reader has funds -->
+<script src="https://paperwall.app/publisher-sdk.js"
+  data-facilitator-url="https://gateway.kobaru.io"
+  data-pay-to="YOUR_EVM_ADDRESS"
+  data-price="10000"
+  data-accepts='[
+    {"network":"eip155:324705682","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},
+    {"network":"eip155:84532","token":"0x036CbD53842c5426634e7929541eC2318f3dCF7e"},
+    {"network":"eip155:1187947933","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},
+    {"network":"eip155:8453","token":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}
+  ]'
+></script>
+
+<!-- Single-network (backwards-compatible): SKALE Testnet only -->
 <script src="https://paperwall.app/publisher-sdk.js"
   data-facilitator-url="https://gateway.kobaru.io"
   data-pay-to="YOUR_EVM_ADDRESS"
@@ -183,9 +197,8 @@ Configuration notes:
 
 - `data-pay-to`: Your wallet address where you want to receive USDC payments
 - `data-price="10000"`: $0.01 USDC (USDC uses 6 decimals, so 10000 = 0.01)
-- `data-network="eip155:324705682"`: SKALE Base Sepolia testnet (ultra-low fees)
-
-USDC contract (`0x2e08028E3C4c2356572E096d8EF835cD5C6030bD`) is configured at the facilitator level.
+- `data-accepts`: JSON array of networks you accept (multi-network). The extension picks the best network based on the reader's balance. `data-accepts` and `data-network` are mutually exclusive.
+- `data-network="eip155:324705682"`: Single-network mode, SKALE Testnet. Still supported for backwards compatibility.
 
 See the full **[publisher guide](docs/publisher-guide.md)** for configuration details.
 
@@ -195,8 +208,8 @@ See the full **[publisher guide](docs/publisher-guide.md)** for configuration de
    - **Chrome / Edge:** [Chrome Web Store](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako)
    - **Firefox / Firefox for Android:** [Firefox Add-ons page]
 2. Create a wallet with a strong password
-3. Fund your wallet with SKALE testnet USDC
-4. Visit a Paperwall-enabled site and click "Pay" when prompted
+3. Fund your wallet with USDC on any supported network (SKALE Testnet, Base Sepolia, SKALE Mainnet, or Base Mainnet)
+4. Visit a Paperwall-enabled site and click "Pay" when prompted — the extension selects the best network automatically
 
 ### For developers
 
@@ -250,8 +263,8 @@ paperwall/
 | SDK        | TypeScript, builds to IIFE for `<script>` tag usage                     |
 | Extension  | TypeScript, Chrome Extension Manifest V3, Web Crypto API                |
 | Agent CLI  | TypeScript, Node.js, Commander, viem                                    |
-| Blockchain | SKALE Base Sepolia testnet (`eip155:324705682`), ultra-low fees         |
-| Token      | Bridged USDC (`0x2e08028E3C4c2356572E096d8EF835cD5C6030bD`), 6 decimals |
+| Blockchain | SKALE Testnet (`eip155:324705682`), Base Sepolia (`eip155:84532`), SKALE Mainnet (`eip155:1187947933`), Base Mainnet (`eip155:8453`) |
+| Token      | USDC (network-specific contract address), 6 decimals                    |
 | Payments   | EIP-712 typed data signing, `transferWithAuthorization` (EIP-3009)      |
 | Security   | PBKDF2 (600k iterations) + AES-256-GCM wallet encryption                |
 
@@ -262,8 +275,8 @@ paperwall/
 **We’re still in the early stages. Here’s what you need to know:**
 
 - **USDC only** -- no support for ETH or other tokens
-- **SKALE network only** -- other L2s are not yet supported
-- **Testnet phase** -- use test funds, not real money
+- **SKALE and Base only** -- other L2s are not yet supported
+- **Use testnet first** -- SKALE Testnet and Base Sepolia are available for testing; SKALE Mainnet and Base Mainnet are available for production
 
 ---
 

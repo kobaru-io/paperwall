@@ -3,7 +3,7 @@
 // Shows site info, price, and approve/reject buttons.
 
 import { formatUsdcFromString } from '../../shared/format.js';
-import { getNetwork } from '../../shared/constants.js';
+import { getNetwork, isTestnet } from '../../shared/constants.js';
 
 interface PageState {
   origin: string;
@@ -49,21 +49,24 @@ export function renderPaymentPrompt(
   priceValue.className = 'payment-value payment-price';
   priceValue.textContent = `$${formatUsdcFromString(pageState.price)} USDC`;
 
-  const networkLabel = document.createElement('p');
-  networkLabel.className = 'payment-label';
-  networkLabel.textContent = 'Network';
+  const networkVia = document.createElement('p');
+  networkVia.className = 'network-via';
+  networkVia.textContent = `via ${formatNetworkName(pageState.network)}`;
 
-  const networkValue = document.createElement('p');
-  networkValue.className = 'payment-value';
-  networkValue.textContent = formatNetworkName(pageState.network);
+  if (isTestnet(pageState.network)) {
+    const testBadge = document.createElement('span');
+    testBadge.className = 'badge-test';
+    testBadge.textContent = 'TEST';
+    testBadge.setAttribute('aria-label', 'Testnet network');
+    networkVia.appendChild(testBadge);
+  }
 
   siteSection.append(
     originLabel,
     originValue,
     priceLabel,
     priceValue,
-    networkLabel,
-    networkValue,
+    networkVia,
   );
 
   // Status display
@@ -134,10 +137,16 @@ export function renderPaymentPrompt(
         // Transition back to dashboard after a short delay
         setTimeout(() => onComplete(), 2000);
       } else {
-        showStatus(
-          (response.error as string) || 'Payment failed.',
-          true,
-        );
+        const errorMsg = (response.error as string) || 'Payment failed.';
+        showStatus(errorMsg, true);
+
+        // Show per-network balance breakdown on insufficient balance
+        if (response.networkBalances && response.needed) {
+          const balances = response.networkBalances as Record<string, { network: string; formatted: string }>;
+          const needed = response.needed as string;
+          showBalanceBreakdown(statusDisplay, balances, needed);
+        }
+
         setLoading(false);
       }
     } catch (err) {
@@ -174,4 +183,48 @@ function formatNetworkName(caip2: string): string {
   } catch {
     return caip2;
   }
+}
+
+function showBalanceBreakdown(
+  container: HTMLElement,
+  balances: Record<string, { network: string; formatted: string }>,
+  needed: string,
+): void {
+  const breakdown = document.createElement('div');
+  breakdown.className = 'network-breakdown';
+  breakdown.setAttribute('role', 'list');
+  breakdown.setAttribute('aria-label', 'Balance per network');
+
+  const header = document.createElement('p');
+  header.className = 'payment-label';
+  header.textContent = `Need $${needed} USDC`;
+  breakdown.appendChild(header);
+
+  for (const [caip2, bal] of Object.entries(balances)) {
+    const row = document.createElement('div');
+    row.className = 'network-row';
+    row.setAttribute('role', 'listitem');
+
+    const nameContainer = document.createElement('span');
+    nameContainer.className = 'network-row-name';
+    nameContainer.textContent = formatNetworkName(caip2);
+
+    if (isTestnet(caip2)) {
+      const badge = document.createElement('span');
+      badge.className = 'badge-test';
+      badge.textContent = 'TEST';
+      badge.setAttribute('aria-label', 'Testnet network');
+      nameContainer.appendChild(badge);
+    }
+
+    const amount = document.createElement('span');
+    amount.className = 'network-row-amount';
+    amount.textContent = `$${bal.formatted}`;
+
+    row.append(nameContainer, amount);
+    breakdown.appendChild(row);
+  }
+
+  // Insert breakdown after the status message
+  container.insertAdjacentElement('afterend', breakdown);
 }

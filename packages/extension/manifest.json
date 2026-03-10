@@ -6,7 +6,9 @@
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://gateway.kobaru.io/*",
-    "https://*.skalenodes.com/*"
+    "https://*.skalenodes.com/*",
+    "https://sepolia.base.org/*",
+    "https://mainnet.base.org/*"
   ],
   "background": {
     "service_worker": "background.js",

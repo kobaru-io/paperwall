@@ -8,9 +8,14 @@ import { Link } from '@/i18n/navigation';
 
 type Mode = 'client' | 'server';
 
+type NetworkMode = 'single' | 'multi';
+
 interface Config {
   walletAddress: string;
   priceUsd: string;
+  networkMode: NetworkMode;
+  selectedNetwork: string;
+  selectedNetworks: string[];
   mode: Mode;
   optimistic: boolean;
   paymentUrl: string;
@@ -25,6 +30,13 @@ const SDK_URL =
   'https://paperwall.app/publisher-sdk.js';
 
 // -- Helpers ---
+
+const SUPPORTED_NETWORKS = [
+  { id: 'eip155:324705682', name: 'SKALE Testnet', env: 'test' as const },
+  { id: 'eip155:84532', name: 'Base Sepolia', env: 'test' as const },
+  { id: 'eip155:1187947933', name: 'SKALE Mainnet', env: 'production' as const },
+  { id: 'eip155:8453', name: 'Base Mainnet', env: 'production' as const },
+];
 
 const PRICE_PRESETS = [
   { label: '$0.01', value: '0.01' },
@@ -53,8 +65,13 @@ function buildScriptTag(cfg: Config): string {
     `  data-facilitator-url="https://gateway.kobaru.io"`,
     `  data-pay-to="${addr}"`,
     `  data-price="${price}"`,
-    `  data-network="eip155:324705682"`,
   ];
+  if (cfg.networkMode === 'multi' && cfg.selectedNetworks.length > 0) {
+    const accepts = cfg.selectedNetworks.map((n) => ({ network: n }));
+    lines.push(`  data-accepts='${JSON.stringify(accepts)}'`);
+  } else {
+    lines.push(`  data-network="${cfg.selectedNetwork}"`);
+  }
   if (cfg.mode === 'server') {
     lines.push(`  data-mode="server"`);
     lines.push(`  data-payment-url="${cfg.paymentUrl || 'https://yoursite.com/api/paperwall-payment'}"`);
@@ -141,6 +158,9 @@ export default function SetupForm() {
   const [config, setConfig] = useState<Config>({
     walletAddress: '',
     priceUsd: '0.01',
+    networkMode: 'single',
+    selectedNetwork: 'eip155:324705682',
+    selectedNetworks: ['eip155:324705682'],
     mode: 'client',
     optimistic: true,
     paymentUrl: '',
@@ -269,6 +289,146 @@ export default function SetupForm() {
                     = {toMicroUnits(config.priceUsd)} {t('priceMicroUnits')}
                   </span>
                 </div>
+              )}
+            </div>
+
+            {/* Network */}
+            <div className="mb-8">
+              <label className="mb-2 block font-bold">{t('networkLabel')}</label>
+              <p className="mb-3 text-sm text-[var(--muted-foreground)]">{t('networkHint')}</p>
+
+              {/* Single / Multi toggle */}
+              <div className="mb-3 flex gap-0">
+                {(['single', 'multi'] as NetworkMode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => set({ networkMode: m })}
+                    className={[
+                      'flex-1 border-2 border-[var(--border)] px-4 py-3 text-sm font-bold transition-all',
+                      m === 'single' ? 'border-r-0' : '',
+                      config.networkMode === m
+                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                        : 'bg-[var(--card)] hover:bg-[var(--muted)]',
+                    ].join(' ')}
+                  >
+                    {m === 'single' ? t('networkSingle') : t('networkMulti')}
+                  </button>
+                ))}
+              </div>
+
+              {config.networkMode === 'multi' && (
+                <p className="mb-3 text-xs text-[var(--muted-foreground)]">{t('networkMultiHint')}</p>
+              )}
+
+              {/* Testnet group */}
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--muted-foreground)]">{t('networkTestLabel')}</p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {SUPPORTED_NETWORKS.filter((n) => n.env === 'test').map((net) =>
+                  config.networkMode === 'single' ? (
+                    <button
+                      key={net.id}
+                      type="button"
+                      onClick={() => set({ selectedNetwork: net.id })}
+                      className={[
+                        'border-2 border-[var(--border)] px-4 py-2 text-sm font-bold transition-all',
+                        config.selectedNetwork === net.id
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[2px_2px_0_var(--border)]'
+                          : 'bg-[var(--card)] hover:bg-[var(--muted)]',
+                      ].join(' ')}
+                    >
+                      {net.name}
+                    </button>
+                  ) : (
+                    <label
+                      key={net.id}
+                      className={[
+                        'flex cursor-pointer items-center gap-2 border-2 border-[var(--border)] px-4 py-2 text-sm font-bold transition-all',
+                        config.selectedNetworks.includes(net.id)
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[2px_2px_0_var(--border)]'
+                          : 'bg-[var(--card)] hover:bg-[var(--muted)]',
+                      ].join(' ')}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={config.selectedNetworks.includes(net.id)}
+                        onChange={(e) => {
+                          const nets = e.target.checked
+                            ? [...config.selectedNetworks, net.id]
+                            : config.selectedNetworks.filter((id) => id !== net.id);
+                          set({ selectedNetworks: nets });
+                        }}
+                        className="sr-only"
+                      />
+                      <span className={[
+                        'flex h-4 w-4 shrink-0 items-center justify-center border-2',
+                        config.selectedNetworks.includes(net.id)
+                          ? 'border-[var(--primary-foreground)] bg-[var(--primary-foreground)] text-[var(--primary)]'
+                          : 'border-[var(--border)]',
+                      ].join(' ')}>
+                        {config.selectedNetworks.includes(net.id) && '✓'}
+                      </span>
+                      {net.name}
+                    </label>
+                  ),
+                )}
+              </div>
+
+              {/* Production group */}
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--muted-foreground)]">{t('networkProdLabel')}</p>
+              <div className="mb-1 flex flex-wrap gap-2">
+                {SUPPORTED_NETWORKS.filter((n) => n.env === 'production').map((net) =>
+                  config.networkMode === 'single' ? (
+                    <button
+                      key={net.id}
+                      type="button"
+                      onClick={() => set({ selectedNetwork: net.id })}
+                      className={[
+                        'border-2 border-[var(--border)] px-4 py-2 text-sm font-bold transition-all',
+                        config.selectedNetwork === net.id
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[2px_2px_0_var(--border)]'
+                          : 'bg-[var(--card)] hover:bg-[var(--muted)]',
+                      ].join(' ')}
+                    >
+                      {net.name}
+                    </button>
+                  ) : (
+                    <label
+                      key={net.id}
+                      className={[
+                        'flex cursor-pointer items-center gap-2 border-2 border-[var(--border)] px-4 py-2 text-sm font-bold transition-all',
+                        config.selectedNetworks.includes(net.id)
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[2px_2px_0_var(--border)]'
+                          : 'bg-[var(--card)] hover:bg-[var(--muted)]',
+                      ].join(' ')}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={config.selectedNetworks.includes(net.id)}
+                        onChange={(e) => {
+                          const nets = e.target.checked
+                            ? [...config.selectedNetworks, net.id]
+                            : config.selectedNetworks.filter((id) => id !== net.id);
+                          set({ selectedNetworks: nets });
+                        }}
+                        className="sr-only"
+                      />
+                      <span className={[
+                        'flex h-4 w-4 shrink-0 items-center justify-center border-2',
+                        config.selectedNetworks.includes(net.id)
+                          ? 'border-[var(--primary-foreground)] bg-[var(--primary-foreground)] text-[var(--primary)]'
+                          : 'border-[var(--border)]',
+                      ].join(' ')}>
+                        {config.selectedNetworks.includes(net.id) && '✓'}
+                      </span>
+                      {net.name}
+                    </label>
+                  ),
+                )}
+              </div>
+
+              {config.networkMode === 'multi' && config.selectedNetworks.length === 0 && (
+                <p className="mt-2 text-xs text-[var(--destructive)]">{t('networkAtLeastOne')}</p>
               )}
             </div>
 

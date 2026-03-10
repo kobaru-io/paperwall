@@ -139,7 +139,7 @@ describe('CLI', () => {
   });
 
   describe('wallet balance', () => {
-    it('should output human-friendly balance by default', async () => {
+    it('should output human-friendly balance for specific network', async () => {
       const logs: string[] = [];
       vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
         logs.push(String(args[0]));
@@ -157,13 +157,13 @@ describe('CLI', () => {
       );
 
       const program2 = buildProgram();
-      await program2.parseAsync(['node', 'test', 'wallet', 'balance']);
+      await program2.parseAsync(['node', 'test', 'wallet', 'balance', '--network', 'eip155:324705682']);
 
       expect(logs.some(l => l.includes('Balance:') && l.includes('5.00 USDC'))).toBe(true);
-      expect(logs.some(l => l.includes('Network:') && l.includes('SKALE Base Sepolia'))).toBe(true);
+      expect(logs.some(l => l.includes('Network:') && l.includes('SKALE Testnet'))).toBe(true);
     });
 
-    it('should output JSON with --json flag', async () => {
+    it('should output JSON with --json flag for specific network', async () => {
       const logs: string[] = [];
       vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
         logs.push(String(args[0]));
@@ -181,7 +181,7 @@ describe('CLI', () => {
       );
 
       const program2 = buildProgram();
-      await program2.parseAsync(['node', 'test', 'wallet', 'balance', '--json']);
+      await program2.parseAsync(['node', 'test', 'wallet', 'balance', '--json', '--network', 'eip155:324705682']);
 
       const output = JSON.parse(logs[0] as string) as {
         ok: boolean;
@@ -192,7 +192,68 @@ describe('CLI', () => {
       expect(output.ok).toBe(true);
       expect(output.balanceFormatted).toBe('5.00');
       expect(output.asset).toBe('USDC');
-      expect(output.network).toBe('SKALE Base Sepolia (eip155:324705682)');
+      expect(output.network).toBe('SKALE Testnet (eip155:324705682)');
+    });
+
+    it('should show all 4 networks when no --network specified', async () => {
+      const logs: string[] = [];
+      vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+        logs.push(String(args[0]));
+      });
+
+      const program1 = buildProgram();
+      await program1.parseAsync(['node', 'test', 'wallet', 'create']);
+      logs.length = 0;
+
+      // Mock 4 RPC calls (one per network)
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      fetchSpy
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x' + (1_500_000).toString(16) }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x' + (250_000).toString(16) }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+      const program2 = buildProgram();
+      await program2.parseAsync(['node', 'test', 'wallet', 'balance']);
+
+      const allOutput = logs.join('\n');
+      expect(allOutput).toContain('SKALE Testnet');
+      expect(allOutput).toContain('Base Sepolia');
+      expect(allOutput).toContain('SKALE Mainnet');
+      expect(allOutput).toContain('Base Mainnet');
+    });
+
+    it('should show [TEST] for testnet networks', async () => {
+      const logs: string[] = [];
+      vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+        logs.push(String(args[0]));
+      });
+
+      const program1 = buildProgram();
+      await program1.parseAsync(['node', 'test', 'wallet', 'create']);
+      logs.length = 0;
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      fetchSpy
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x0' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+      const program2 = buildProgram();
+      await program2.parseAsync(['node', 'test', 'wallet', 'balance']);
+
+      const allOutput = logs.join('\n');
+      // Testnet lines should have [TEST]
+      const skaleTestLine = logs.find(l => l.includes('SKALE Testnet'));
+      const baseSepoliaLine = logs.find(l => l.includes('Base Sepolia'));
+      const skaleMainLine = logs.find(l => l.includes('SKALE Mainnet'));
+      const baseMainLine = logs.find(l => l.includes('Base Mainnet'));
+
+      expect(skaleTestLine).toContain('[TEST]');
+      expect(baseSepoliaLine).toContain('[TEST]');
+      expect(skaleMainLine).not.toContain('[TEST]');
+      expect(baseMainLine).not.toContain('[TEST]');
     });
   });
 

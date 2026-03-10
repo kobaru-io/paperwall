@@ -6,9 +6,16 @@ import {
   getAllNetworks,
   isTestnet,
   getNetworkPriority,
-} from './networks.js';
+  DEFAULT_NETWORK,
+} from '../src/shared/constants.js';
 
-describe('networks', () => {
+describe('constants (extension)', () => {
+  describe('DEFAULT_NETWORK', () => {
+    it('should be the SKALE Testnet CAIP-2 identifier', () => {
+      expect(DEFAULT_NETWORK).toBe('eip155:324705682');
+    });
+  });
+
   describe('getNetwork', () => {
     it('should resolve SKALE Testnet by CAIP-2 ID', () => {
       const network = getNetwork('eip155:324705682');
@@ -45,15 +52,15 @@ describe('networks', () => {
     });
 
     it('should throw for unknown network', () => {
-      expect(() => getNetwork('eip155:1')).toThrow('unsupported network');
+      expect(() => getNetwork('eip155:1')).toThrow('Unsupported network');
     });
 
     it('should throw for malformed CAIP-2 string', () => {
-      expect(() => getNetwork('invalid')).toThrow('unsupported network');
+      expect(() => getNetwork('invalid')).toThrow('Unsupported network');
     });
 
     it('should throw for empty string', () => {
-      expect(() => getNetwork('')).toThrow('unsupported network');
+      expect(() => getNetwork('')).toThrow('Unsupported network');
     });
 
     it('should have valid USDC addresses starting with 0x', () => {

@@ -47,6 +47,7 @@ vi.mock('../src/background/facilitator.js', () => ({
 
 vi.mock('../src/background/balance.js', () => ({
   fetchBalance: vi.fn(),
+  fetchBalances: vi.fn(),
   clearBalanceCache: vi.fn(),
 }));
 
@@ -65,7 +66,7 @@ vi.mock('../src/background/history.js', () => ({
 
 import { handleMessage, _resetPageStateForTest } from '../src/background/message-router.js';
 import { getSupported, settle, verify } from '../src/background/facilitator.js';
-import { fetchBalance } from '../src/background/balance.js';
+import { fetchBalance, fetchBalances } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
 import { addPayment, updatePaymentStatus } from '../src/background/history.js';
 
@@ -93,6 +94,10 @@ async function setupUnlockedWallet(): Promise<string> {
   return result.address as string;
 }
 
+function mockBalancesMap(network: string, raw: string, formatted: string): Map<string, { raw: string; formatted: string; network: string; asset: string; fetchedAt: number }> {
+  return new Map([[network, { raw, formatted, network, asset: 'USDC', fetchedAt: Date.now() }]]);
+}
+
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('payment-flow', () => {
@@ -107,6 +112,7 @@ describe('payment-flow', () => {
     );
     // Reset mock implementations for module mocks (clearAllMocks doesn't reset implementations)
     vi.mocked(fetchBalance).mockReset();
+    vi.mocked(fetchBalances).mockReset();
     vi.mocked(getSupported).mockReset();
     vi.mocked(verify).mockReset();
     vi.mocked(settle).mockReset();
@@ -114,6 +120,23 @@ describe('payment-flow', () => {
     vi.mocked(addPayment).mockReset();
     vi.mocked(updatePaymentStatus).mockReset();
     tabsOnRemovedListeners.length = 0;
+
+    // Default fetchBalances mock: delegates to fetchBalance for each network.
+    // This mirrors the real implementation so existing fetchBalance mocks work.
+    vi.mocked(fetchBalances).mockImplementation(async (address: string, networks: string[]) => {
+      const results = new Map<string, { raw: string; formatted: string; network: string; asset: string; fetchedAt: number }>();
+      const settlements = await Promise.allSettled(
+        networks.map((network) => fetchBalance(address, network)),
+      );
+      for (let i = 0; i < networks.length; i++) {
+        const settlement = settlements[i];
+        const network = networks[i];
+        if (settlement && settlement.status === 'fulfilled' && settlement.value && network) {
+          results.set(network, settlement.value);
+        }
+      }
+      return results;
+    });
   });
 
   describe('PAGE_HAS_PAPERWALL', () => {
@@ -1126,6 +1149,198 @@ describe('payment-flow', () => {
       expect(sendMessageToTabMock).toHaveBeenCalledWith(1, expect.objectContaining({
         type: 'PAYMENT_COMPLETE',
       }));
+    });
+  });
+
+  describe('multi-network selection', () => {
+    it('calls fetchBalances for all networks in accepts[]', async () => {
+      await setupUnlockedWallet();
+
+      // Mock fetchBalances to track the call
+      vi.mocked(fetchBalances).mockResolvedValueOnce(
+        new Map([
+          ['eip155:324705682', { raw: '50000', formatted: '0.05', network: 'eip155:324705682', asset: 'USDC', fetchedAt: Date.now() }],
+          ['eip155:84532', { raw: '100000', formatted: '0.10', network: 'eip155:84532', asset: 'USDC', fetchedAt: Date.now() }],
+        ]),
+      );
+
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [
+            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' },
+            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0xreceiver' },
+          ],
+        },
+      });
+
+      // fetchBalances should have been called with both networks
+      expect(vi.mocked(fetchBalances)).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(['eip155:324705682', 'eip155:84532']),
+      );
+    });
+
+    it('service worker calls selectNetwork and stores selected network in page state', async () => {
+      await setupUnlockedWallet();
+
+      // SKALE testnet has insufficient balance, Base Sepolia has sufficient
+      vi.mocked(fetchBalances).mockResolvedValueOnce(
+        new Map([
+          ['eip155:324705682', { raw: '100', formatted: '0.0001', network: 'eip155:324705682', asset: 'USDC', fetchedAt: Date.now() }],
+          ['eip155:84532', { raw: '100000', formatted: '0.10', network: 'eip155:84532', asset: 'USDC', fetchedAt: Date.now() }],
+        ]),
+      );
+
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [
+            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' },
+            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0xreceiver' },
+          ],
+        },
+      });
+
+      // GET_PAGE_STATE should return the selected network (Base Sepolia, since SKALE was insufficient)
+      vi.mocked(fetchBalance).mockResolvedValueOnce({
+        raw: '100000', formatted: '0.10', network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', fetchedAt: Date.now(),
+      });
+
+      const pageState = await sendMessage({ type: 'GET_PAGE_STATE', tabId: 1 });
+      expect(pageState.success).toBe(true);
+      expect(pageState.detected).toBe(true);
+      expect(pageState.network).toBe('eip155:84532');
+    });
+
+    it('single-network signal still processed correctly (backwards compat)', async () => {
+      await setupUnlockedWallet();
+
+      // Mock fetchBalances for PAGE_HAS_PAPERWALL
+      vi.mocked(fetchBalances).mockResolvedValueOnce(
+        new Map([['eip155:324705682', { raw: '50000', formatted: '0.05', network: 'eip155:324705682', asset: 'USDC', fetchedAt: Date.now() }]]),
+      );
+
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:324705682',
+            amount: '10000',
+            asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+            payTo: '0xreceiver',
+          }],
+        },
+      });
+
+      // Mock for SIGN_AND_PAY fetchBalances
+      vi.mocked(fetchBalance).mockResolvedValue({
+        raw: '50000', formatted: '0.05', network: 'eip155:324705682',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', fetchedAt: Date.now(),
+      });
+      vi.mocked(getSupported).mockResolvedValue({
+        kinds: [{ x402Version: 2, scheme: 'exact', network: 'eip155:324705682', extra: { name: 'USD Coin', version: '2' } }],
+        extensions: [], signers: {},
+      });
+      vi.mocked(createSignedPayload).mockResolvedValue({
+        x402Version: 2,
+        resource: { url: 'https://example.com/article', description: '', mimeType: '' },
+        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+      });
+      vi.mocked(verify).mockResolvedValue({ isValid: true });
+      vi.mocked(settle).mockResolvedValue({ success: true, transaction: '0xtxhash', network: 'eip155:324705682' });
+
+      const response = await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+      expect(response.success).toBe(true);
+      expect(response.transaction).toBe('0xtxhash');
+    });
+
+    it('payment retries on next network after failure on first', async () => {
+      await setupUnlockedWallet();
+
+      // Both networks have sufficient balance
+      vi.mocked(fetchBalance).mockResolvedValue({
+        raw: '500000', formatted: '0.50', network: 'eip155:324705682',
+        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', fetchedAt: Date.now(),
+      });
+
+      await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [
+            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' },
+            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0xreceiver' },
+          ],
+        },
+      });
+
+      // getSupported: both networks supported
+      vi.mocked(getSupported).mockResolvedValue({
+        kinds: [
+          { x402Version: 2, scheme: 'exact', network: 'eip155:324705682', extra: { name: 'USD Coin', version: '2' } },
+          { x402Version: 2, scheme: 'exact', network: 'eip155:84532', extra: { name: 'USD Coin', version: '2' } },
+        ],
+        extensions: [], signers: {},
+      });
+
+      vi.mocked(createSignedPayload).mockResolvedValue({
+        x402Version: 2,
+        resource: { url: 'https://example.com/article', description: '', mimeType: '' },
+        accepted: { scheme: 'exact', network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+      });
+      vi.mocked(verify).mockResolvedValue({ isValid: true });
+
+      // Settlement fails on first network (SKALE testnet), succeeds on second (Base Sepolia)
+      vi.mocked(settle)
+        .mockRejectedValueOnce(new Error('Network timeout'))
+        .mockResolvedValueOnce({ success: true, transaction: '0xretry_txhash', network: 'eip155:84532' });
+
+      const response = await sendMessage({ type: 'SIGN_AND_PAY', tabId: 1 });
+
+      expect(response.success).toBe(true);
+      expect(response.transaction).toBe('0xretry_txhash');
+      // settle should have been called twice (first failed, second succeeded)
+      expect(vi.mocked(settle)).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -3,7 +3,8 @@ import {
   encryptKey,
   decryptKey,
 } from './key-manager.js';
-import { fetchBalance } from './balance.js';
+import { fetchBalance, fetchBalances } from './balance.js';
+import { selectNetwork, type AcceptEntry, type ResolvedPaymentOption } from './network-selector.js';
 import {
   getSupported,
   verify,
@@ -15,7 +16,7 @@ import {
 import { initializePaymentClient, createSignedPayload } from './payment-client.js';
 import { addPayment, getHistory, updatePaymentStatus } from './history.js';
 import { formatUsdcFromString } from '../shared/format.js';
-import { getExpectedAsset } from '../shared/constants.js';
+import { getExpectedAsset, getAllNetworks } from '../shared/constants.js';
 
 // ── Logging ─────────────────────────────────────────────────────────
 
@@ -239,6 +240,42 @@ async function handleGetBalance(): Promise<MessageResponse> {
   }
 }
 
+async function handleGetBalancesAllNetworks(): Promise<MessageResponse> {
+  const sessionData = await chrome.storage.session.get('privateKey');
+  const privateKey = sessionData['privateKey'] as string | undefined;
+
+  if (!privateKey) {
+    return { success: false, error: 'Wallet is locked' };
+  }
+
+  const localData = await chrome.storage.local.get('wallet');
+  const wallet = localData['wallet'] as WalletData | undefined;
+
+  if (!wallet) {
+    return { success: false, error: 'No wallet found' };
+  }
+
+  try {
+    const networks = Array.from(getAllNetworks().keys());
+    const balancesMap = await fetchBalances(wallet.address, networks);
+    const balances: Record<string, { raw: string; formatted: string; network: string; asset: string }> = {};
+
+    for (const [caip2, result] of balancesMap.entries()) {
+      balances[caip2] = {
+        raw: result.raw,
+        formatted: result.formatted,
+        network: result.network,
+        asset: result.asset,
+      };
+    }
+
+    return { success: true, balances };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, error: message };
+  }
+}
+
 // ── Page Detection Handlers ─────────────────────────────────────────
 
 async function handlePageHasPaperwall(
@@ -289,20 +326,35 @@ async function handlePageHasPaperwall(
 
   console.log(`[paperwall ${ts()}] Page detected:`, { origin, price, mode: state.mode, optimistic: state.optimistic });
 
-  // Check affordability for badge color
+  // Check affordability across all advertised networks for badge color
   const sessionData = await chrome.storage.session.get('privateKey');
   if (sessionData['privateKey']) {
     const localData = await chrome.storage.local.get('wallet');
     const wallet = localData['wallet'] as WalletData | undefined;
-    if (wallet) {
+    if (wallet && state.signal.accepts.length > 0) {
       try {
-        const balance = await fetchBalance(wallet.address, state.network);
-        const canAfford = BigInt(balance.raw) >= BigInt(state.price);
-        if (!canAfford) {
-          // Amber badge: detected but insufficient balance
+        const acceptNetworks = state.signal.accepts.map((a) => a.network);
+        const balances = await fetchBalances(wallet.address, acceptNetworks);
+        const defaultPayTo = state.signal.accepts[0]?.payTo ?? '';
+        if (!defaultPayTo) {
+          // No payTo address available — cannot determine affordability
           setBadge(tabId, '$', BADGE_COLORS.amber);
           return { success: true };
         }
+        const acceptEntries: AcceptEntry[] = state.signal.accepts.map((a) => ({
+          network: a.network,
+          asset: a.asset,
+          payTo: a.payTo,
+        }));
+        const resolved = selectNetwork(acceptEntries, balances, state.price, defaultPayTo);
+        if (!resolved) {
+          // No network has sufficient balance
+          setBadge(tabId, '$', BADGE_COLORS.amber);
+          return { success: true };
+        }
+        // Update page state with selected network
+        state.network = resolved.network;
+        activePages.set(tabId, state);
       } catch {
         // Fall through to default purple badge
       }
@@ -394,158 +446,294 @@ async function handleSignAndPay(
   }
 
   try {
-    // 2. Pre-flight balance check
-    const balance = await fetchBalance(wallet.address, pageState.network);
-    const balanceBigInt = BigInt(balance.raw);
-    const priceBigInt = BigInt(pageState.price);
-
-    if (balanceBigInt < priceBigInt) {
-      setBadgeError(tabId);
-      return {
-        success: false,
-        error: `Insufficient balance: have ${balance.formatted}, need ${formatUsdcFromString(pageState.price)}`,
-      };
-    }
-
-    // 3. Get payment offer from signal
+    // 2. Fetch balances for all advertised networks in parallel
     if (!pageState.signal || !pageState.signal.accepts || pageState.signal.accepts.length === 0) {
       setBadgeError(tabId);
       return { success: false, error: 'No payment signal found' };
     }
 
-    const offer = pageState.signal.accepts[0];
+    const acceptNetworks = pageState.signal.accepts.map((a) => a.network);
+    const balances = await fetchBalances(wallet.address, acceptNetworks);
 
-    // 4. Get /supported from facilitator and find matching network
-
-    const supported: SupportedResponse = await getSupported(
-      pageState.facilitatorUrl,
-      pageState.siteKey,
-    );
-
-    const supportedKind = supported.kinds.find(
-      (kind) => kind.network === offer.network,
-    );
-
-    if (!supportedKind) {
+    // 3. Build priority list of viable networks using selectNetwork
+    const defaultPayTo = pageState.signal.accepts[0]?.payTo ?? '';
+    if (!defaultPayTo) {
       setBadgeError(tabId);
+      return { success: false, error: 'No payment recipient address available' };
+    }
+    const acceptEntries: AcceptEntry[] = pageState.signal.accepts.map((a) => ({
+      network: a.network,
+      asset: a.asset,
+      payTo: a.payTo,
+    }));
+
+    // Build full sorted priority list for retry support
+    const viableNetworks = buildViableNetworkList(acceptEntries, balances, pageState.price, defaultPayTo);
+
+    if (viableNetworks.length === 0) {
+      setBadgeError(tabId);
+      // Find best balance for error message
+      let bestFormatted = '0.00';
+      for (const bal of balances.values()) {
+        bestFormatted = bal.formatted;
+        break;
+      }
+
+      // Build per-network breakdown for the UI
+      const networkBalances: Record<string, { network: string; formatted: string }> = {};
+      for (const [caip2, bal] of balances.entries()) {
+        networkBalances[caip2] = { network: caip2, formatted: bal.formatted };
+      }
+
       return {
         success: false,
-        error: `Network ${offer.network} is not supported by facilitator`,
+        error: `Insufficient balance: have ${bestFormatted}, need ${formatUsdcFromString(pageState.price)}`,
+        networkBalances,
+        needed: formatUsdcFromString(pageState.price),
       };
     }
 
-    // Validate asset matches network
-    const expectedAsset = getExpectedAsset(offer.network);
-    if (expectedAsset && expectedAsset.toLowerCase() !== offer.asset.toLowerCase()) {
-      setBadgeError(tabId);
-      return { success: false, error: `Unsupported asset ${offer.asset} for network ${offer.network}` };
+    // 4. Try each viable network in priority order
+    const requestId = (message['requestId'] as string) ?? crypto.randomUUID();
+    let lastError = '';
+
+    for (const resolved of viableNetworks) {
+      const attemptResult = await attemptPaymentOnNetwork(
+        tabId, pageState, wallet, privateKey, resolved, requestId, message, optimisticReturned,
+      );
+
+      if (attemptResult.success) {
+        if (attemptResult.optimisticReturned) {
+          optimisticReturned = true;
+        }
+        return attemptResult.response;
+      }
+
+      // Network failed — log and try next
+      lastError = (attemptResult.response.error as string) ?? 'Unknown error';
+      console.log(`[paperwall ${ts()}] Payment failed on ${resolved.network}, trying next network:`, lastError);
     }
 
-    // 5. Initialize x402 payment client and create signed payload
-    initializePaymentClient(privateKey, offer.network);
+    // All networks exhausted
+    setBadgeError(tabId);
+    return { success: false, error: lastError || 'Payment failed on all available networks' };
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : 'Unknown payment error';
+    console.error(`[paperwall ${ts()}] Payment failed:`, { error: errorMessage });
 
-    const paymentRequirements: PaymentRequirements = {
-      scheme: 'exact',
-      network: offer.network as `${string}:${string}`,
-      asset: offer.asset,
-      amount: offer.amount,
-      payTo: offer.payTo,
-      maxTimeoutSeconds: offer.maxTimeoutSeconds ?? 300,
-      extra: {
-        ...(offer.extra as Record<string, unknown> | undefined ?? {}),
-        ...(supportedKind.extra ?? {}),
-      },
+    setBadgeError(tabId);
+
+    // Send error to content script
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'PAYMENT_COMPLETE',
+        requestId: message['requestId'] as string,
+        success: false,
+        error: errorMessage,
+      });
+    } catch (err2) {
+      // Tab may have been closed, ignore error
+      console.warn('Failed to notify content script of error:', err2);
+    }
+
+    return { success: false, error: errorMessage };
+  } finally {
+    // Don't clear guard if optimistic path returned — settleInBackground handles cleanup
+    if (!optimisticReturned) {
+      paymentsInProgress.delete(tabId);
+    }
+  }
+}
+
+// ── Network Priority List Builder ─────────────────────────────────
+
+function buildViableNetworkList(
+  accepts: ReadonlyArray<AcceptEntry>,
+  balances: ReadonlyMap<string, { raw: string }>,
+  requiredAmount: string,
+  defaultPayTo: string,
+): ResolvedPaymentOption[] {
+  const remaining = [...accepts];
+  const result: ResolvedPaymentOption[] = [];
+
+  while (remaining.length > 0) {
+    const selected = selectNetwork(remaining, balances, requiredAmount, defaultPayTo);
+    if (!selected) break;
+    result.push(selected);
+    // Remove the selected network from remaining accepts
+    const idx = remaining.findIndex((e) => e.network === selected.network);
+    if (idx !== -1) {
+      remaining.splice(idx, 1);
+    }
+  }
+
+  return result;
+}
+
+// ── Single-Network Payment Attempt ────────────────────────────────
+
+async function attemptPaymentOnNetwork(
+  tabId: number,
+  pageState: ActivePageState,
+  wallet: WalletData,
+  privateKey: string,
+  resolved: ResolvedPaymentOption,
+  requestId: string,
+  message: Record<string, unknown>,
+  _optimisticAlreadyReturned: boolean,
+): Promise<{ success: boolean; response: MessageResponse; optimisticReturned?: boolean }> {
+  // Find the matching signal offer for maxTimeoutSeconds and extra fields
+  const signalOffer = pageState.signal.accepts.find((a) => a.network === resolved.network);
+  const offer = {
+    scheme: signalOffer?.scheme ?? 'exact',
+    network: resolved.network,
+    amount: signalOffer?.amount ?? pageState.price,
+    asset: resolved.asset,
+    payTo: resolved.payTo,
+    maxTimeoutSeconds: signalOffer?.maxTimeoutSeconds,
+    extra: signalOffer?.extra,
+  };
+
+  // Get /supported from facilitator and find matching network
+  const supported: SupportedResponse = await getSupported(
+    pageState.facilitatorUrl,
+    pageState.siteKey,
+  );
+
+  const supportedKind = supported.kinds.find(
+    (kind) => kind.network === offer.network,
+  );
+
+  if (!supportedKind) {
+    return {
+      success: false,
+      response: { success: false, error: `Network ${offer.network} is not supported by facilitator` },
     };
+  }
 
-    // 6. Create signed payment payload via x402 library (EIP-3009)
-    const paymentPayload = await createSignedPayload(
-      { url: pageState.url, description: '', mimeType: '' },
+  // Validate asset matches network
+  const expectedAsset = getExpectedAsset(offer.network);
+  if (!expectedAsset) {
+    return {
+      success: false,
+      response: { success: false, error: `Unsupported network ${offer.network}` },
+    };
+  }
+  if (expectedAsset.toLowerCase() !== offer.asset.toLowerCase()) {
+    return {
+      success: false,
+      response: { success: false, error: `Unsupported asset ${offer.asset} for network ${offer.network}` },
+    };
+  }
+
+  // Initialize x402 payment client with wildcard EVM support
+  initializePaymentClient(privateKey);
+
+  const paymentRequirements: PaymentRequirements = {
+    scheme: 'exact',
+    network: offer.network as `${string}:${string}`,
+    asset: offer.asset,
+    amount: offer.amount,
+    payTo: offer.payTo,
+    maxTimeoutSeconds: offer.maxTimeoutSeconds ?? 300,
+    extra: {
+      ...(offer.extra as Record<string, unknown> | undefined ?? {}),
+      ...(supportedKind.extra ?? {}),
+    },
+  };
+
+  // Create signed payment payload via x402 library (EIP-3009)
+  const paymentPayload = await createSignedPayload(
+    { url: pageState.url, description: '', mimeType: '' },
+    paymentRequirements,
+  );
+
+  // Verify before settling (unless skip-verify setting is enabled)
+  const settingsData = await chrome.storage.local.get('settings');
+  const settings = (settingsData['settings'] as Record<string, unknown> | undefined) ?? {};
+  const skipVerify = settings['skipVerify'] === true;
+
+  if (!skipVerify) {
+    const verifyResult = await verify(
+      pageState.facilitatorUrl,
+      pageState.siteKey,
+      paymentPayload,
       paymentRequirements,
     );
 
-    // 7. Verify before settling (unless skip-verify setting is enabled)
-    const settingsData = await chrome.storage.local.get('settings');
-    const settings = (settingsData['settings'] as Record<string, unknown> | undefined) ?? {};
-    const skipVerify = settings['skipVerify'] === true;
-
-    if (!skipVerify) {
-      const verifyResult = await verify(
-        pageState.facilitatorUrl,
-        pageState.siteKey,
-        paymentPayload,
-        paymentRequirements,
-      );
-
-      if (!verifyResult.isValid) {
-        setBadgeError(tabId);
-        return { success: false, error: `Payment verification failed: ${verifyResult.invalidReason ?? 'unknown'}` };
-      }
-    }
-
-    const requestId = (message['requestId'] as string) ?? crypto.randomUUID();
-
-    if (pageState.optimistic) {
-      // -- Optimistic flow: notify immediately, settle in background --
-      console.log(`[paperwall ${ts()}] Optimistic flow: unlocking content immediately, settling in background`);
-
-      // 8a. Send PAYMENT_OPTIMISTIC to content script
-      try {
-        await chrome.tabs.sendMessage(tabId, {
-          type: 'PAYMENT_OPTIMISTIC',
-          requestId,
-          amount: offer.amount,
-          url: pageState.url,
-        });
-      } catch { /* tab may be closed */ }
-
-      // 8b. Set badge to pending
-      setBadge(tabId, '⏳', BADGE_COLORS.detected);
-
-      // 8c. Write pending history record
-      await addPayment({
-        requestId,
-        origin: pageState.origin,
-        url: pageState.url,
-        amount: offer.amount,
-        formattedAmount: formatUsdcFromString(offer.amount),
-        network: offer.network,
-        asset: offer.asset,
-        from: wallet.address,
-        to: offer.payTo,
-        txHash: '',
-        status: 'pending',
-        timestamp: Date.now(),
-      });
-
-      // 8d. Persist in-flight state for SW restart recovery
-      const sessionData2 = await chrome.storage.session.get('pendingPayments');
-      const pending = (sessionData2['pendingPayments'] as Record<string, unknown> | undefined) ?? {};
-      pending[requestId] = {
-        requestId,
-        tabId,
-        url: pageState.url,
-        facilitatorUrl: pageState.facilitatorUrl,
-        siteKey: pageState.siteKey,
-        signedAt: Date.now(),
+    if (!verifyResult.isValid) {
+      return {
+        success: false,
+        response: { success: false, error: `Payment verification failed: ${verifyResult.invalidReason ?? 'unknown'}` },
       };
-      await chrome.storage.session.set({ pendingPayments: pending });
-
-      // 8e. Settle in background (don't await before returning)
-      // settleInBackground handles paymentsInProgress cleanup in its finally block
-      optimisticReturned = true;
-      settleInBackground(
-        tabId, requestId, wallet.address, offer,
-        pageState.facilitatorUrl, pageState.siteKey,
-        paymentPayload, paymentRequirements,
-      );
-
-      return { success: true, optimistic: true, requestId };
     }
+  }
 
-    // -- Non-optimistic flow (existing behavior) --
-    console.log(`[paperwall ${ts()}] Non-optimistic flow: waiting for settlement before unlocking`);
+  if (pageState.optimistic) {
+    // -- Optimistic flow: notify immediately, settle in background --
+    console.log(`[paperwall ${ts()}] Optimistic flow: unlocking content immediately, settling in background`);
 
-    // 8. Settle via facilitator
+    // Send PAYMENT_OPTIMISTIC to content script
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'PAYMENT_OPTIMISTIC',
+        requestId,
+        amount: offer.amount,
+        url: pageState.url,
+      });
+    } catch { /* tab may be closed */ }
+
+    // Set badge to pending
+    setBadge(tabId, '\u23F3', BADGE_COLORS.detected);
+
+    // Write pending history record
+    await addPayment({
+      requestId,
+      origin: pageState.origin,
+      url: pageState.url,
+      amount: offer.amount,
+      formattedAmount: formatUsdcFromString(offer.amount),
+      network: offer.network,
+      asset: offer.asset,
+      from: wallet.address,
+      to: offer.payTo,
+      txHash: '',
+      status: 'pending',
+      timestamp: Date.now(),
+    });
+
+    // Persist in-flight state for SW restart recovery
+    const sessionData2 = await chrome.storage.session.get('pendingPayments');
+    const pending = (sessionData2['pendingPayments'] as Record<string, unknown> | undefined) ?? {};
+    pending[requestId] = {
+      requestId,
+      tabId,
+      url: pageState.url,
+      facilitatorUrl: pageState.facilitatorUrl,
+      siteKey: pageState.siteKey,
+      signedAt: Date.now(),
+    };
+    await chrome.storage.session.set({ pendingPayments: pending });
+
+    // Settle in background (don't await before returning)
+    settleInBackground(
+      tabId, requestId, wallet.address, offer,
+      pageState.facilitatorUrl, pageState.siteKey,
+      paymentPayload, paymentRequirements,
+    );
+
+    return {
+      success: true,
+      optimisticReturned: true,
+      response: { success: true, optimistic: true, requestId },
+    };
+  }
+
+  // -- Non-optimistic flow --
+  console.log(`[paperwall ${ts()}] Non-optimistic flow: waiting for settlement before unlocking`);
+
+  try {
     const settleResult = await settle(
       pageState.facilitatorUrl,
       pageState.siteKey,
@@ -555,7 +743,7 @@ async function handleSignAndPay(
 
     console.log(`[paperwall ${ts()}] Settlement confirmed:`, { requestId, txHash: settleResult.transaction });
 
-    // 9. Save payment record
+    // Save payment record
     await addPayment({
       requestId,
       origin: pageState.origin,
@@ -571,7 +759,7 @@ async function handleSignAndPay(
       timestamp: Date.now(),
     });
 
-    // 10. Update badge to green
+    // Update badge to green
     setBadge(tabId, '\u2713', BADGE_COLORS.success);
 
     const result = {
@@ -602,33 +790,11 @@ async function handleSignAndPay(
       console.warn('Failed to notify content script:', err);
     }
 
-    return result;
-  } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : 'Unknown payment error';
-    console.error(`[paperwall ${ts()}] Payment failed:`, { error: errorMessage });
-
-    setBadgeError(tabId);
-
-    // Send error to content script
-    try {
-      await chrome.tabs.sendMessage(tabId, {
-        type: 'PAYMENT_COMPLETE',
-        requestId: message['requestId'] as string,
-        success: false,
-        error: errorMessage,
-      });
-    } catch (err2) {
-      // Tab may have been closed, ignore error
-      console.warn('Failed to notify content script of error:', err2);
-    }
-
-    return { success: false, error: errorMessage };
-  } finally {
-    // Don't clear guard if optimistic path returned — settleInBackground handles cleanup
-    if (!optimisticReturned) {
-      paymentsInProgress.delete(tabId);
-    }
+    return { success: true, response: result };
+  } catch (settleErr) {
+    // Settlement failed on this network — allow retry on next
+    const errorMessage = settleErr instanceof Error ? settleErr.message : 'Settlement failed';
+    return { success: false, response: { success: false, error: errorMessage } };
   }
 }
 
@@ -876,7 +1042,7 @@ export function handleMessage(
   // (price, facilitatorUrl, network) as part of the protocol design — restriction
   // of PAGE_HAS_PAPERWALL to extension origins would break the payment detection
   // flow entirely. This is by design, not an oversight.
-  const sensitiveTypes = ['CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE', 'GET_HISTORY', 'EXPORT_PRIVATE_KEY', 'IMPORT_PRIVATE_KEY'];
+  const sensitiveTypes = ['CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE', 'GET_BALANCES_ALL_NETWORKS', 'GET_HISTORY', 'EXPORT_PRIVATE_KEY', 'IMPORT_PRIVATE_KEY'];
   if (sensitiveTypes.includes(type ?? '')) {
     // sender.url starts with the extension scheme (chrome-extension:// on Chrome/Edge,
     // moz-extension:// on Firefox) — getURL('') returns the correct scheme at runtime.
@@ -908,6 +1074,8 @@ export function handleMessage(
       }
       case 'GET_BALANCE':
         return handleGetBalance();
+      case 'GET_BALANCES_ALL_NETWORKS':
+        return handleGetBalancesAllNetworks();
       case 'PAGE_HAS_PAPERWALL':
         return handlePageHasPaperwall(message, sender);
       case 'GET_PAGE_STATE':

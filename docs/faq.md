@@ -168,22 +168,44 @@ If your wallet has little or no funds, you can:
 - Importing into MetaMask or Coinbase Wallet
 - Connecting external wallets instead of embedded keys
 
-### How do I get USDC on SKALE?
+### Which networks are supported?
 
-**Testnet (current):**
-1. Visit the SKALE testnet faucet (check SKALE documentation for current URL)
-2. Paste your wallet address (from Paperwall extension)
-3. Request testnet USDC (free, no real value)
+Paperwall supports four networks:
 
-**Mainnet (Phase 1):**
+| Network | CAIP-2 | Use |
+|---------|--------|-----|
+| SKALE Testnet | `eip155:324705682` | Testing (free testnet USDC) |
+| Base Sepolia | `eip155:84532` | Testing (free testnet USDC) |
+| SKALE Mainnet | `eip155:1187947933` | Production |
+| Base Mainnet | `eip155:8453` | Production |
+
+You can hold USDC on any or all of these networks. The extension and agent will use whichever one the publisher accepts and you have funds on.
+
+### How does the extension choose which network to use?
+
+When a publisher accepts multiple networks, the extension checks your balance on each supported network and selects the best one automatically. The priority order (used as a tiebreaker when you have funds on multiple networks) is: SKALE Testnet → Base Sepolia → SKALE Mainnet → Base Mainnet.
+
+SKALE Testnet is prioritized because it has the lowest fees. If you have a zero balance on all networks, the extension will show you which networks the publisher accepts so you know where to add funds.
+
+### What does the TEST badge mean in the extension?
+
+A **TEST** badge appears in the payment history next to transactions that were settled on a testnet (SKALE Testnet or Base Sepolia). It's a reminder that testnet USDC has no real monetary value. Payments on mainnet networks (SKALE Mainnet, Base Mainnet) do not show the badge.
+
+### How do I get USDC on a supported network?
+
+**Testnet (for development and testing):**
+- **SKALE Testnet:** Visit the SKALE testnet faucet (see SKALE documentation for the current URL). Paste your Paperwall wallet address and request free testnet USDC.
+- **Base Sepolia:** Use the Coinbase or Alchemy Base Sepolia faucet. Paste your Paperwall wallet address.
+
+**Mainnet (for real payments):**
 1. Buy USDC on an exchange (Coinbase, Kraken, Binance)
-2. Withdraw to SKALE network (select "SKALE" as destination)
+2. Withdraw to the desired network (select "SKALE" or "Base" as the destination)
 3. Send to your Paperwall wallet address
 
 **Phase 2 (Fiat On-Ramp):**
 1. Click "Add Funds" in Paperwall extension
 2. Enter credit card details
-3. MoonPay converts USD → USDC on SKALE automatically
+3. MoonPay converts USD → USDC automatically
 
 ### Does Paperwall track what I read?
 
@@ -217,7 +239,7 @@ The Agent CLI already supports budget controls (per-request, daily, and total sp
 Be careful before approving. The extension shows:
 - Site name
 - Exact price
-- Network (SKALE testnet vs mainnet)
+- Network being used (with TEST badge for testnet)
 
 If you're unsure, click "Reject."
 
@@ -331,7 +353,7 @@ Paperwall supports three integration tiers with progressive trust guarantees. Al
   data-facilitator-url="https://gateway.kobaru.io"
   data-pay-to="YOUR_WALLET_ADDRESS"
   data-price="10000"
-  data-network="eip155:324705682"
+  data-accepts='[{"network":"eip155:324705682","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},{"network":"eip155:84532","token":"0x036CbD53842c5426634e7929541eC2318f3dCF7e"}]'
 ></script>
 ```
 
@@ -374,7 +396,7 @@ Paperwall supports three integration tiers with progressive trust guarantees. Al
   data-facilitator-url="https://gateway.kobaru.io"
   data-pay-to="YOUR_WALLET_ADDRESS"
   data-price="10000"
-  data-network="eip155:324705682"
+  data-accepts='[{"network":"eip155:324705682","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},{"network":"eip155:84532","token":"0x036CbD53842c5426634e7929541eC2318f3dCF7e"}]'
 ></script>
 ```
 
@@ -428,7 +450,7 @@ Paperwall supports three integration tiers with progressive trust guarantees. Al
   data-facilitator-url="https://gateway.kobaru.io"
   data-pay-to="YOUR_WALLET_ADDRESS"
   data-price="10000"
-  data-network="eip155:324705682"
+  data-accepts='[{"network":"eip155:1187947933","token":"0x2e08028E3C4c2356572E096d8EF835cD5C6030bD"},{"network":"eip155:8453","token":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}]'
   data-mode="server"
   data-payment-url="https://yoursite.com/api/verify-payment"
 ></script>

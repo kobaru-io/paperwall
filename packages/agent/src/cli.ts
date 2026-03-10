@@ -6,7 +6,7 @@ import { setBudget, getBudget, smallestToUsdc, usdcToSmallest } from './budget.j
 import { getRecent, getSpendingTotals } from './history.js';
 import { readJsonFile } from './storage.js';
 import { outputJson, outputError } from './output.js';
-import { getNetwork } from './networks.js';
+import { getNetwork, getAllNetworks, isTestnet } from './networks.js';
 import { fetchWithPayment, flushPendingSettlements } from './payment-engine.js';
 
 import type { WalletFile } from './wallet.js';
@@ -92,26 +92,108 @@ export function buildProgram(): Command {
 
   wallet
     .command('balance')
-    .description('Show USDC balance')
-    .option('-n, --network <caip2>', 'Query specific network')
+    .description('Show USDC balance across all supported networks')
+    .option('-n, --network <caip2>', 'Query specific network only')
     .option('--json', 'Output as JSON')
     .action(async (options: { network?: string; json?: boolean }) => {
       try {
-        const result = await getBalance(options.network);
-        const networkConfig = getNetwork(result.network);
+        if (options.network) {
+          // Single-network mode (backward compatible)
+          const result = await getBalance(options.network);
+          const networkConfig = getNetwork(result.network);
+          if (options.json) {
+            outputJson({
+              ok: true,
+              address: result.address,
+              balanceFormatted: result.balanceFormatted,
+              asset: result.asset,
+              network: `${networkConfig.name} (${result.network})`,
+            });
+          } else {
+            console.log('');
+            console.log(`  Balance:  ${result.balanceFormatted} ${result.asset}`);
+            console.log(`  Address:  ${result.address}`);
+            console.log(`  Network:  ${networkConfig.name} (${result.network})`);
+            console.log('');
+          }
+          return;
+        }
+
+        // Multi-network mode: show balances across all supported networks
+        const allNetworks = getAllNetworks();
+        const networkIds = [...allNetworks.keys()];
+
+        // Fetch address first
+        const address = await getAddress();
+
+        // Fetch balances in parallel
+        const balanceResults = await Promise.allSettled(
+          networkIds.map((networkId) => getBalance(networkId)),
+        );
+
+        interface NetworkBalance {
+          readonly networkId: string;
+          readonly name: string;
+          readonly balanceFormatted: string;
+          readonly balance: string;
+          readonly isTest: boolean;
+        }
+
+        const networkBalances: NetworkBalance[] = [];
+        for (let i = 0; i < networkIds.length; i++) {
+          const networkId = networkIds[i];
+          if (!networkId) continue;
+          const result = balanceResults[i];
+          const networkConfig = allNetworks.get(networkId);
+          if (!networkConfig) continue;
+
+          if (result?.status === 'fulfilled') {
+            networkBalances.push({
+              networkId,
+              name: networkConfig.name,
+              balanceFormatted: result.value.balanceFormatted,
+              balance: result.value.balance,
+              isTest: isTestnet(networkId),
+            });
+          } else {
+            networkBalances.push({
+              networkId,
+              name: networkConfig.name,
+              balanceFormatted: '0.00',
+              balance: '0',
+              isTest: isTestnet(networkId),
+            });
+          }
+        }
+
         if (options.json) {
           outputJson({
             ok: true,
-            address: result.address,
-            balanceFormatted: result.balanceFormatted,
-            asset: result.asset,
-            network: `${networkConfig.name} (${result.network})`,
+            address,
+            networks: networkBalances.map((nb) => ({
+              networkId: nb.networkId,
+              name: nb.name,
+              balanceFormatted: nb.balanceFormatted,
+              balance: nb.balance,
+              testnet: nb.isTest,
+            })),
           });
         } else {
           console.log('');
-          console.log(`  Balance:  ${result.balanceFormatted} ${result.asset}`);
-          console.log(`  Address:  ${result.address}`);
-          console.log(`  Network:  ${networkConfig.name} (${result.network})`);
+          console.log(`  Wallet: ${address}`);
+          console.log('');
+          console.log('  Network              Balance');
+          console.log('  ' + '\u2500'.repeat(38));
+          let totalSmallest = 0n;
+          for (const nb of networkBalances) {
+            const testTag = nb.isTest ? '  [TEST]' : '';
+            const nameCol = nb.name.padEnd(20);
+            console.log(`  ${nameCol} $${nb.balanceFormatted}${testTag}`);
+            totalSmallest += BigInt(nb.balance);
+          }
+          console.log('  ' + '\u2500'.repeat(38));
+          const totalFormatted = smallestToUsdc(totalSmallest.toString());
+          console.log(`  ${'Total'.padEnd(20)} $${totalFormatted}`);
           console.log('');
         }
       } catch (error: unknown) {

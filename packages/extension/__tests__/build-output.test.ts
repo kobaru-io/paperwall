@@ -85,6 +85,26 @@ describe.skipIf(!buildExists)('Build output manifests', () => {
     expect(fs.existsSync(path.join(iconsDir, 'icon-48.png'))).toBe(true);
     expect(fs.existsSync(path.join(iconsDir, 'icon-128.png'))).toBe(true);
   });
+
+  it('Chrome dist/manifest.json host_permissions includes Base Sepolia RPC', () => {
+    const manifest = JSON.parse(fs.readFileSync(chromeManifestPath, 'utf-8'));
+    expect(manifest.host_permissions).toContain('https://sepolia.base.org/*');
+  });
+
+  it('Chrome dist/manifest.json host_permissions includes Base Mainnet RPC', () => {
+    const manifest = JSON.parse(fs.readFileSync(chromeManifestPath, 'utf-8'));
+    expect(manifest.host_permissions).toContain('https://mainnet.base.org/*');
+  });
+
+  it('Firefox dist-firefox/manifest.json host_permissions includes Base Sepolia RPC', () => {
+    const manifest = JSON.parse(fs.readFileSync(firefoxManifestPath, 'utf-8'));
+    expect(manifest.host_permissions).toContain('https://sepolia.base.org/*');
+  });
+
+  it('Firefox dist-firefox/manifest.json host_permissions includes Base Mainnet RPC', () => {
+    const manifest = JSON.parse(fs.readFileSync(firefoxManifestPath, 'utf-8'));
+    expect(manifest.host_permissions).toContain('https://mainnet.base.org/*');
+  });
 });
 
 describe.skipIf(buildExists)('Build output manifests (skipped — artifacts not found)', () => {

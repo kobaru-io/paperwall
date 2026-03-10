@@ -10,8 +10,8 @@ export interface AcceptedPayment {
   readonly scheme: string;
   readonly network: string;
   readonly amount: string;
-  readonly asset: string;
-  readonly payTo: string;
+  readonly asset?: string;
+  readonly payTo?: string;
 }
 
 export interface MetaTagPayload {
@@ -105,12 +105,11 @@ export function parseMetaTag(html: string): MetaTagPayload | null {
   if (
     typeof first['scheme'] !== 'string' ||
     typeof first['network'] !== 'string' ||
-    typeof first['amount'] !== 'string' ||
-    typeof first['asset'] !== 'string' ||
-    typeof first['payTo'] !== 'string'
+    typeof first['amount'] !== 'string'
   ) {
     return null;
   }
+  // asset and payTo are optional — validated below if present
 
   // Validate optional paymentUrl
   const paymentUrl = parsed['paymentUrl'];
@@ -125,19 +124,23 @@ export function parseMetaTag(html: string): MetaTagPayload | null {
     if (
       typeof entry['scheme'] !== 'string' ||
       typeof entry['network'] !== 'string' ||
-      typeof entry['amount'] !== 'string' ||
-      typeof entry['asset'] !== 'string' ||
-      !isEthAddress(entry['asset']) ||
-      typeof entry['payTo'] !== 'string'
+      typeof entry['amount'] !== 'string'
     ) {
       continue;
     }
+    // Validate asset if present (must be valid Ethereum address)
+    const entryAsset = typeof entry['asset'] === 'string' ? entry['asset'] : undefined;
+    if (entryAsset !== undefined && !isEthAddress(entryAsset)) {
+      continue;
+    }
+    // payTo is optional — let the network selector resolve it if absent
+    const entryPayTo = typeof entry['payTo'] === 'string' ? entry['payTo'] : undefined;
     validatedAccepts.push({
       scheme: entry['scheme'],
       network: entry['network'],
       amount: entry['amount'],
-      asset: entry['asset'],
-      payTo: entry['payTo'],
+      ...(entryAsset !== undefined ? { asset: entryAsset } : {}),
+      ...(entryPayTo !== undefined ? { payTo: entryPayTo } : {}),
     });
   }
 
@@ -163,11 +166,6 @@ export function parseMetaTag(html: string): MetaTagPayload | null {
 // -- Script Tag Parser ---
 
 /**
- * Default USDC address on SKALE Base Sepolia testnet.
- */
-const DEFAULT_ASSET = '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD';
-
-/**
  * Regex to match a <script> tag whose src contains "paperwall".
  * Captures the full tag contents (attributes) for data-* extraction.
  */
@@ -177,9 +175,15 @@ const SCRIPT_TAG_REGEX = /<script\s+([^>]*src=["'][^"']*paperwall[^"']*["'][^>]*
  * Extract a data-* attribute value from a tag string.
  */
 function extractDataAttr(tag: string, name: string): string | undefined {
-  const regex = new RegExp(`data-${name}\\s*=\\s*["']([^"']+)["']`, 'i');
-  const match = regex.exec(tag);
-  return match?.[1];
+  // Try single-quoted attribute first (allows double quotes inside, e.g. JSON)
+  const singleQuoteRegex = new RegExp(`data-${name}\\s*=\\s*'([^']+)'`, 'i');
+  const singleMatch = singleQuoteRegex.exec(tag);
+  if (singleMatch?.[1]) return singleMatch[1];
+
+  // Try double-quoted attribute (allows single quotes inside)
+  const doubleQuoteRegex = new RegExp(`data-${name}\\s*=\\s*"([^"]+)"`, 'i');
+  const doubleMatch = doubleQuoteRegex.exec(tag);
+  return doubleMatch?.[1];
 }
 
 /**
@@ -199,7 +203,45 @@ export function parseScriptTag(html: string): MetaTagPayload | null {
     const payTo = extractDataAttr(tag, 'pay-to');
     const price = extractDataAttr(tag, 'price');
     const network = extractDataAttr(tag, 'network');
+    const dataAccepts = extractDataAttr(tag, 'accepts');
 
+    // Mode B: multi-network via data-accepts attribute
+    if (!network && dataAccepts && facilitatorUrl) {
+      let parsedAccepts: unknown;
+      try {
+        parsedAccepts = JSON.parse(dataAccepts);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsedAccepts) || parsedAccepts.length === 0) continue;
+
+      const acceptEntries: Array<{ scheme?: string; network: string; amount: string; asset?: string; payTo?: string }> = [];
+      for (const entry of parsedAccepts) {
+        if (!isRecord(entry)) continue;
+        if (typeof entry['network'] !== 'string' || typeof entry['amount'] !== 'string') continue;
+        acceptEntries.push({
+          scheme: typeof entry['scheme'] === 'string' ? entry['scheme'] : undefined,
+          network: entry['network'],
+          amount: entry['amount'],
+          asset: typeof entry['asset'] === 'string' ? entry['asset'] : undefined,
+          payTo: typeof entry['payTo'] === 'string' ? entry['payTo'] : undefined,
+        });
+      }
+
+      const result = buildMultiNetworkPayload({
+        facilitatorUrl,
+        accepts: acceptEntries,
+        mode: extractDataAttr(tag, 'mode'),
+        paymentUrl: extractDataAttr(tag, 'payment-url'),
+        siteKey: extractDataAttr(tag, 'site-key'),
+        optimistic: extractDataAttr(tag, 'optimistic'),
+      });
+
+      if (result) return result;
+      continue;
+    }
+
+    // Mode A: single-network via individual data-* attributes
     if (!facilitatorUrl || !payTo || !price || !network) continue;
 
     const result = buildPayload({
@@ -246,6 +288,7 @@ export function parseInitCall(html: string): MetaTagPayload | null {
     const price = extractStringProp(window, 'price');
     const network = extractStringProp(window, 'network');
 
+    // Mode A: single-network with individual properties (payTo + price + network all present)
     if (facilitatorUrl && payTo && price && network) {
       const result = buildPayload({
         facilitatorUrl,
@@ -262,8 +305,73 @@ export function parseInitCall(html: string): MetaTagPayload | null {
       if (result) return result;
     }
 
+    // Mode B: multi-network with accepts array (no top-level payTo/price required)
+    if (facilitatorUrl && (!payTo || !price)) {
+      const acceptEntries = extractAcceptsArray(window);
+      if (acceptEntries.length > 0) {
+        const result = buildMultiNetworkPayload({
+          facilitatorUrl,
+          accepts: acceptEntries,
+          mode: extractStringProp(window, 'mode'),
+          paymentUrl: extractStringProp(window, 'paymentUrl'),
+          siteKey: extractStringProp(window, 'siteKey'),
+          optimistic: extractStringProp(window, 'optimistic'),
+        });
+
+        if (result) return result;
+      }
+    }
+
     searchFrom = idx + marker.length;
   }
+}
+
+/**
+ * Extract an accepts array from a JS object literal window.
+ * Matches: accepts: [ { network: '...', amount: '...', ... }, ... ]
+ */
+function extractAcceptsArray(
+  window: string,
+): Array<{ scheme?: string; network: string; amount: string; asset?: string; payTo?: string }> {
+  const acceptsMatch = /accepts\s*:\s*\[/.exec(window);
+  if (!acceptsMatch) return [];
+
+  const startIdx = acceptsMatch.index + acceptsMatch[0].length;
+  // Find the matching closing bracket
+  let depth = 1;
+  let endIdx = startIdx;
+  while (endIdx < window.length && depth > 0) {
+    if (window[endIdx] === '[') depth++;
+    if (window[endIdx] === ']') depth--;
+    endIdx++;
+  }
+
+  if (depth !== 0) return [];
+
+  // Extract the array content (without outer brackets)
+  const arrayContent = window.substring(startIdx, endIdx - 1);
+
+  // Parse individual objects by finding { ... } patterns
+  const entries: Array<{ scheme?: string; network: string; amount: string; asset?: string; payTo?: string }> = [];
+  const objectRegex = /\{[^}]+\}/g;
+  let objMatch: RegExpExecArray | null;
+
+  while ((objMatch = objectRegex.exec(arrayContent)) !== null) {
+    const objStr = objMatch[0];
+    const networkVal = extractStringProp(objStr, 'network');
+    const amountVal = extractStringProp(objStr, 'amount');
+    if (!networkVal || !amountVal) continue;
+
+    entries.push({
+      scheme: extractStringProp(objStr, 'scheme'),
+      network: networkVal,
+      amount: amountVal,
+      asset: extractStringProp(objStr, 'asset'),
+      payTo: extractStringProp(objStr, 'payTo'),
+    });
+  }
+
+  return entries;
 }
 
 /**
@@ -285,6 +393,21 @@ interface RawPaymentConfig {
   readonly network: string;
   readonly mode?: string;
   readonly asset?: string;
+  readonly paymentUrl?: string;
+  readonly siteKey?: string;
+  readonly optimistic?: string;
+}
+
+interface RawMultiNetworkConfig {
+  readonly facilitatorUrl: string;
+  readonly accepts: ReadonlyArray<{
+    readonly scheme?: string;
+    readonly network: string;
+    readonly amount: string;
+    readonly asset?: string;
+    readonly payTo?: string;
+  }>;
+  readonly mode?: string;
   readonly paymentUrl?: string;
   readonly siteKey?: string;
   readonly optimistic?: string;
@@ -316,9 +439,9 @@ function buildPayload(config: RawPaymentConfig): MetaTagPayload | null {
   const mode = config.mode ?? 'client';
   if (mode !== 'client' && mode !== 'server') return null;
 
-  // Validate asset (default to SKALE USDC)
-  const asset = config.asset ?? DEFAULT_ASSET;
-  if (!isEthAddress(asset)) return null;
+  // Validate asset if present (no default — let network selector resolve)
+  const asset = config.asset;
+  if (asset !== undefined && !isEthAddress(asset)) return null;
 
   // Validate paymentUrl if present
   if (config.paymentUrl) {
@@ -340,10 +463,75 @@ function buildPayload(config: RawPaymentConfig): MetaTagPayload | null {
         scheme: 'exact',
         network: config.network,
         amount: config.price,
-        asset,
+        ...(asset !== undefined ? { asset } : {}),
         payTo: config.payTo,
       },
     ],
+    optimistic: config.optimistic !== 'false',
+  };
+}
+
+/**
+ * Validate a multi-network config and build a MetaTagPayload.
+ * Used when publishers specify accepts[] instead of a single network.
+ */
+function buildMultiNetworkPayload(config: RawMultiNetworkConfig): MetaTagPayload | null {
+  // Validate facilitatorUrl
+  try {
+    const parsed = new URL(config.facilitatorUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  } catch {
+    return null;
+  }
+
+  if (config.accepts.length === 0) return null;
+
+  // Validate mode
+  const mode = config.mode ?? 'client';
+  if (mode !== 'client' && mode !== 'server') return null;
+
+  // Validate paymentUrl if present
+  if (config.paymentUrl) {
+    try {
+      new URL(config.paymentUrl);
+    } catch {
+      return null;
+    }
+  }
+
+  // Build validated accepts array
+  const validatedAccepts: AcceptedPayment[] = [];
+  for (const entry of config.accepts) {
+    // Validate network is CAIP-2 format
+    if (!/^eip155:\d+$/.test(entry.network)) continue;
+
+    // Validate amount is a positive integer
+    if (!/^\d+$/.test(entry.amount) || entry.amount === '0') continue;
+
+    // Validate asset if present
+    if (entry.asset !== undefined && !isEthAddress(entry.asset)) continue;
+
+    // Validate payTo if present
+    if (entry.payTo !== undefined && !isEthAddress(entry.payTo)) continue;
+
+    validatedAccepts.push({
+      scheme: entry.scheme ?? 'exact',
+      network: entry.network,
+      amount: entry.amount,
+      ...(entry.asset !== undefined ? { asset: entry.asset } : {}),
+      ...(entry.payTo !== undefined ? { payTo: entry.payTo } : {}),
+    });
+  }
+
+  if (validatedAccepts.length === 0) return null;
+
+  return {
+    x402Version: 2,
+    mode,
+    facilitatorUrl: config.facilitatorUrl,
+    ...(config.siteKey ? { siteKey: config.siteKey } : {}),
+    ...(config.paymentUrl ? { paymentUrl: config.paymentUrl } : {}),
+    accepts: validatedAccepts,
     optimistic: config.optimistic !== 'false',
   };
 }

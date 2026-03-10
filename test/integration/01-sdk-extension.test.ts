@@ -75,7 +75,6 @@ describe('SDK ↔ Extension Integration', () => {
           scheme: 'exact',
           network: 'eip155:324705682',
           amount: '10000',
-          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
           payTo: '0x1234567890123456789012345678901234567890',
         },
       ],

@@ -162,9 +162,14 @@ export function renderSetup(
   passwordInput.addEventListener('keydown', handleKeydown);
   confirmInput.addEventListener('keydown', handleKeydown);
 
+  const networkNote = document.createElement('p');
+  networkNote.className = 'screen-description';
+  networkNote.textContent = 'We support USDC on Base and SKALE.';
+
   container.append(
     welcome,
     intro,
+    networkNote,
     heading,
     description,
     passwordLabel,

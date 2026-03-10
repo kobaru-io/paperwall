@@ -127,14 +127,8 @@ describe('parseMetaTag', () => {
     // So extra attrs between name and content break the match — this should return null
     // unless we use a more permissive regex. Per the task spec, use the strict regex.
     const result = parseMetaTag(html);
-    // With a strict regex (name immediately followed by content), extra attrs in between break it.
-    // BUT the task says "meta tag with extra attributes" should be tested — let's test the alternate form
-    // where content comes after extra attrs. The spec regex won't match this.
-    // Actually, re-reading: the spec says to TEST this case. The result depends on implementation.
-    // For robustness, let's make the regex more permissive: /<meta\s+[^>]*name=["']x402-payment-required["'][^>]*content=["']([^"']+)["']/i
-    // We'll handle both orderings. Let's test BOTH and see what the implementation does.
-    // For now, just assert it returns something or null — the implementation will define behavior.
-    expect(result === null || result?.x402Version === 2).toBe(true);
+    // The strict regex requires name immediately followed by content — extra attrs break the match
+    expect(result).toBeNull();
   });
 
   it('should handle meta tag with content before name (reverse order)', () => {
@@ -142,9 +136,8 @@ describe('parseMetaTag', () => {
     const b64 = Buffer.from(json).toString('base64');
     const html = `<html><head><meta content="${b64}" name="x402-payment-required"></head></html>`;
     const result = parseMetaTag(html);
-    // With strict regex (name then content), reversed order won't match.
-    // Implementation may or may not handle this. Test for null or valid result.
-    expect(result === null || result?.x402Version === 2).toBe(true);
+    // The strict regex requires name before content — reversed order won't match
+    expect(result).toBeNull();
   });
 
   it('should be case-insensitive for the meta tag name', () => {
@@ -219,7 +212,7 @@ describe('parseScriptTag', () => {
     expect(result?.accepts).toHaveLength(1);
     expect(result?.accepts[0]?.network).toBe('eip155:324705682');
     expect(result?.accepts[0]?.amount).toBe('10000');
-    expect(result?.accepts[0]?.asset).toBe('0x2e08028E3C4c2356572E096d8EF835cD5C6030bD');
+    expect(result?.accepts[0]?.asset).toBeUndefined();
     expect(result?.accepts[0]?.payTo).toBe('0x1234567890abcdef1234567890abcdef12345678');
   });
 
@@ -334,7 +327,7 @@ describe('parseScriptTag', () => {
     expect(parseScriptTag(html)).toBeNull();
   });
 
-  it('should default asset to SKALE USDC when data-asset is absent', () => {
+  it('should leave asset undefined when data-asset is absent', () => {
     const html = `<script src="https://cdn.paperwall.io/sdk.js"
       data-facilitator-url="https://gateway.kobaru.io"
       data-pay-to="0x1234567890abcdef1234567890abcdef12345678"
@@ -342,7 +335,7 @@ describe('parseScriptTag', () => {
       data-network="eip155:324705682">
     </script>`;
     const result = parseScriptTag(html);
-    expect(result?.accepts[0]?.asset).toBe('0x2e08028E3C4c2356572E096d8EF835cD5C6030bD');
+    expect(result?.accepts[0]?.asset).toBeUndefined();
   });
 
   it('should default mode to client when data-mode is absent', () => {
@@ -507,7 +500,7 @@ Paperwall.init({
     expect(parseInitCall(html)).toBeNull();
   });
 
-  it('should default mode to client and asset to SKALE USDC', () => {
+  it('should default mode to client and leave asset undefined when not specified', () => {
     const html = `<script>
 Paperwall.init({
   facilitatorUrl: 'https://gateway.kobaru.io',
@@ -518,7 +511,7 @@ Paperwall.init({
 </script>`;
     const result = parseInitCall(html);
     expect(result?.mode).toBe('client');
-    expect(result?.accepts[0]?.asset).toBe('0x2e08028E3C4c2356572E096d8EF835cD5C6030bD');
+    expect(result?.accepts[0]?.asset).toBeUndefined();
   });
 
   it('should parse server mode with paymentUrl', () => {
@@ -583,5 +576,232 @@ Paperwall.init({
     expect(result?.accepts[0]?.amount).toBe('25000');
     expect(result?.accepts[0]?.payTo).toBe('0xABCDEF1234567890abcdef1234567890ABCDEF12');
     expect(result?.siteKey).toBe('pwk_live_myblog');
+  });
+});
+
+// -- Mode B: data-accepts / accepts:[] multi-network tests ---
+
+describe('parseScriptTag Mode B (data-accepts)', () => {
+  it('should parse a script tag with data-accepts JSON attribute', () => {
+    const accepts = JSON.stringify([
+      { network: 'eip155:324705682', amount: '10000', payTo: '0x1234567890abcdef1234567890abcdef12345678' },
+      { network: 'eip155:84532', amount: '10000', payTo: '0x1234567890abcdef1234567890abcdef12345678' },
+    ]);
+    const html = `<script src="https://cdn.paperwall.io/sdk.js"
+      data-facilitator-url="https://gateway.kobaru.io"
+      data-accepts='${accepts}'>
+    </script>`;
+    const result = parseScriptTag(html);
+
+    expect(result).not.toBeNull();
+    expect(result?.x402Version).toBe(2);
+    expect(result?.facilitatorUrl).toBe('https://gateway.kobaru.io');
+    expect(result?.accepts).toHaveLength(2);
+    expect(result?.accepts[0]?.network).toBe('eip155:324705682');
+    expect(result?.accepts[1]?.network).toBe('eip155:84532');
+  });
+
+  it('should return null for data-accepts without facilitatorUrl', () => {
+    const accepts = JSON.stringify([
+      { network: 'eip155:324705682', amount: '10000' },
+    ]);
+    const html = `<script src="https://cdn.paperwall.io/sdk.js"
+      data-accepts='${accepts}'>
+    </script>`;
+    expect(parseScriptTag(html)).toBeNull();
+  });
+
+  it('should prefer Mode A (data-network) when both present', () => {
+    const accepts = JSON.stringify([
+      { network: 'eip155:84532', amount: '5000', payTo: '0x1234567890abcdef1234567890abcdef12345678' },
+    ]);
+    const html = `<script src="https://cdn.paperwall.io/sdk.js"
+      data-facilitator-url="https://gateway.kobaru.io"
+      data-pay-to="0x1234567890abcdef1234567890abcdef12345678"
+      data-price="10000"
+      data-network="eip155:324705682"
+      data-accepts='${accepts}'>
+    </script>`;
+    const result = parseScriptTag(html);
+    // Mode A takes precedence since data-network is present
+    expect(result).not.toBeNull();
+    expect(result?.accepts).toHaveLength(1);
+    expect(result?.accepts[0]?.network).toBe('eip155:324705682');
+    expect(result?.accepts[0]?.amount).toBe('10000');
+  });
+});
+
+describe('parseInitCall Mode B (accepts array)', () => {
+  it('should parse Paperwall.init() with accepts array', () => {
+    const html = `<script>
+Paperwall.init({
+  facilitatorUrl: 'https://gateway.kobaru.io',
+  accepts: [
+    { network: 'eip155:324705682', amount: '10000', payTo: '0x1234567890abcdef1234567890abcdef12345678' },
+    { network: 'eip155:84532', amount: '10000', payTo: '0x1234567890abcdef1234567890abcdef12345678' },
+  ],
+});
+</script>`;
+    const result = parseInitCall(html);
+
+    expect(result).not.toBeNull();
+    expect(result?.x402Version).toBe(2);
+    expect(result?.facilitatorUrl).toBe('https://gateway.kobaru.io');
+    expect(result?.accepts).toHaveLength(2);
+    expect(result?.accepts[0]?.network).toBe('eip155:324705682');
+    expect(result?.accepts[1]?.network).toBe('eip155:84532');
+  });
+
+  it('should return null for accepts array without facilitatorUrl', () => {
+    const html = `<script>
+Paperwall.init({
+  accepts: [
+    { network: 'eip155:324705682', amount: '10000' },
+  ],
+});
+</script>`;
+    expect(parseInitCall(html)).toBeNull();
+  });
+
+  it('should prefer Mode A (network) over Mode B (accepts) when both present', () => {
+    const html = `<script>
+Paperwall.init({
+  facilitatorUrl: 'https://gateway.kobaru.io',
+  payTo: '0x1234567890abcdef1234567890abcdef12345678',
+  price: '10000',
+  network: 'eip155:324705682',
+  accepts: [
+    { network: 'eip155:84532', amount: '5000', payTo: '0x1234567890abcdef1234567890abcdef12345678' },
+  ],
+});
+</script>`;
+    const result = parseInitCall(html);
+    expect(result).not.toBeNull();
+    expect(result?.accepts).toHaveLength(1);
+    expect(result?.accepts[0]?.network).toBe('eip155:324705682');
+    expect(result?.accepts[0]?.amount).toBe('10000');
+  });
+});
+
+// -- Multi-network / optional asset+payTo tests ---
+
+describe('parseMetaTag multi-network support', () => {
+  it('should parse signal with explicit asset correctly', () => {
+    const payload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+          payTo: '0x1234567890abcdef1234567890abcdef12345678',
+        },
+      ],
+    };
+    const html = makeMetaTagHtml(payload);
+    const result = parseMetaTag(html);
+    expect(result).not.toBeNull();
+    expect(result?.accepts[0]?.asset).toBe('0x2e08028E3C4c2356572E096d8EF835cD5C6030bD');
+  });
+
+  it('should parse signal without asset (asset is undefined, not a default address)', () => {
+    const payload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          payTo: '0x1234567890abcdef1234567890abcdef12345678',
+        },
+      ],
+    };
+    const html = makeMetaTagHtml(payload);
+    const result = parseMetaTag(html);
+    expect(result).not.toBeNull();
+    expect(result?.accepts[0]?.asset).toBeUndefined();
+  });
+
+  it('should parse signal with explicit payTo per entry', () => {
+    const payload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          payTo: '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        },
+        {
+          scheme: 'exact',
+          network: 'eip155:84532',
+          amount: '10000',
+          payTo: '0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        },
+      ],
+    };
+    const html = makeMetaTagHtml(payload);
+    const result = parseMetaTag(html);
+    expect(result).not.toBeNull();
+    expect(result?.accepts).toHaveLength(2);
+    expect(result?.accepts[0]?.payTo).toBe('0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    expect(result?.accepts[1]?.payTo).toBe('0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB');
+  });
+
+  it('should parse signal without payTo (payTo is undefined)', () => {
+    const payload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+        },
+      ],
+    };
+    const html = makeMetaTagHtml(payload);
+    const result = parseMetaTag(html);
+    expect(result).not.toBeNull();
+    expect(result?.accepts[0]?.payTo).toBeUndefined();
+  });
+
+  it('should parse multi-network accepts array', () => {
+    const payload = {
+      x402Version: 2,
+      mode: 'client',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+          payTo: '0x1234567890abcdef1234567890abcdef12345678',
+        },
+        {
+          scheme: 'exact',
+          network: 'eip155:84532',
+          amount: '10000',
+          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          payTo: '0x1234567890abcdef1234567890abcdef12345678',
+        },
+      ],
+    };
+    const html = makeMetaTagHtml(payload);
+    const result = parseMetaTag(html);
+    expect(result).not.toBeNull();
+    expect(result?.accepts).toHaveLength(2);
+    expect(result?.accepts[0]?.network).toBe('eip155:324705682');
+    expect(result?.accepts[1]?.network).toBe('eip155:84532');
   });
 });

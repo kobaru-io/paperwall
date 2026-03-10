@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-Chain Micropayments: Paying on the Network That Works Best for You - The Daily Paper</title>
+  <meta name="description" content="Publishers can now accept micropayments across multiple blockchain networks simultaneously, letting readers pay from whichever chain holds their balance.">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- Site Header -->
+  <header class="site-header" role="banner">
+    <div class="site-header__inner">
+      <a href="../index.html" class="site-header__brand" aria-label="The Daily Paper - Homepage">
+        <span class="site-header__title">The Daily Paper</span>
+        <span class="site-header__tagline">Independent Journalism</span>
+      </a>
+      <time class="site-header__date" datetime="2026-03-10">Tuesday, March 10, 2026</time>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="site-nav" aria-label="Main navigation">
+    <ul class="site-nav__list" role="list">
+      <li><a href="../index.html" class="site-nav__link">Home</a></li>
+      <li><a href="#" class="site-nav__link" aria-current="page">Technology</a></li>
+      <li><a href="#" class="site-nav__link">Finance</a></li>
+      <li><a href="#" class="site-nav__link">Science</a></li>
+      <li><a href="#" class="site-nav__link">Opinion</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main id="main-content" class="site-main">
+
+    <a href="../index.html" class="back-link">
+      <span class="back-link__arrow" aria-hidden="true">&larr;</span>
+      Back to Home
+    </a>
+
+    <!-- Thank You Banner (hidden until payment) -->
+    <div class="paperwall-thankyou" role="status" aria-hidden="true" id="thankyou-banner">
+      <p class="paperwall-thankyou__heading">Thank you for your support!</p>
+      <p class="paperwall-thankyou__text">
+        Your micropayment has been processed. Ads have been removed from this page.
+      </p>
+    </div>
+
+    <!-- Banner Ad -->
+    <aside class="paperwall-ad paperwall-ad--banner" role="complementary" aria-label="Advertisement banner">
+      <span class="paperwall-ad__label">Advertisement</span>
+      <div class="paperwall-ad__content">
+        <strong>ChainBridge &mdash; Cross-Chain Asset Transfers</strong>
+        Move your tokens seamlessly between networks. No hassle, no hidden fees.
+      </div>
+    </aside>
+
+    <div class="article-layout">
+
+      <article class="article-content">
+
+        <header class="article-header">
+          <span class="article-header__category">Technology</span>
+          <h1 class="article-header__title">Multi-Chain Micropayments: Paying on the Network That Works Best for You</h1>
+          <div class="article-header__meta">
+            <span>By <strong>James Okonkwo</strong></span>
+            <span class="article-header__meta-divider" aria-hidden="true"></span>
+            <time datetime="2026-03-10">March 10, 2026</time>
+            <span class="article-header__meta-divider" aria-hidden="true"></span>
+            <span>7 min read</span>
+          </div>
+        </header>
+
+        <div class="article-body">
+          <p>
+            When micropayment protocols first emerged, they came with an implicit assumption:
+            one publisher, one blockchain. You picked a network, deployed your contracts, and
+            hoped that your readers happened to have funds on the same chain. If they didn't,
+            they were out of luck &mdash; or stuck navigating a bridge interface that made the
+            $0.05 article feel like it cost $50 in time and frustration.
+          </p>
+
+          <p>
+            That limitation is now gone. The latest iteration of the x402 protocol introduces
+            multi-network support, allowing a single publisher page to accept payments from
+            multiple blockchains simultaneously. A reader with USDC on Base Sepolia can pay
+            just as easily as one with USDC on the SKALE testnet. The browser extension
+            automatically selects the best network based on where the reader's balance is.
+          </p>
+
+          <h2>How Multi-Network Selection Works</h2>
+
+          <p>
+            The mechanism is surprisingly elegant. Instead of declaring a single network in
+            the payment signal, publishers now provide an array of accepted networks. Each
+            entry specifies a CAIP-2 chain identifier &mdash; the standard format for
+            identifying blockchains across ecosystems.
+          </p>
+
+          <p>
+            When the browser extension detects the signal, it checks the reader's balance on
+            each advertised network in priority order. The first network where the reader has
+            sufficient funds is automatically selected. No manual switching, no chain selection
+            dropdown, no confusion.
+          </p>
+
+          <blockquote>
+            "The best UX for multi-chain is no UX at all. The reader shouldn't know or care
+            which chain their payment settles on &mdash; they should just see the price and
+            click pay."
+            &mdash; Protocol design notes, x402 v2 specification
+          </blockquote>
+
+          <!-- Inline Ad -->
+          <aside class="paperwall-ad paperwall-ad--inline" role="complementary" aria-label="Advertisement inline">
+            <span class="paperwall-ad__label">Advertisement</span>
+            <div class="paperwall-ad__content">
+              <strong>SKALE Network &mdash; Zero Gas Fees</strong>
+              Build without transaction costs. Deploy your dApp on SKALE today.
+            </div>
+          </aside>
+
+          <h2>SKALE and Base: A Complementary Pair</h2>
+
+          <p>
+            This article itself is a live demonstration. It accepts payment on two testnet
+            networks: <strong>SKALE Testnet</strong> (chain ID 324705682) and
+            <strong>Base Sepolia</strong> (chain ID 84532). These two chains represent
+            complementary approaches to scaling Ethereum.
+          </p>
+
+          <p>
+            SKALE operates as an application-specific chain with zero gas fees. Every
+            transaction &mdash; whether it's a USDC transfer or a contract interaction
+            &mdash; costs the user nothing in network fees. This makes it ideal for
+            micropayments where even a fraction of a cent in gas would erode the payment's
+            value.
+          </p>
+
+          <p>
+            Base, Coinbase's Layer 2 built on the OP Stack, takes a different approach.
+            Gas fees are low (typically under $0.01) but not zero, and the network benefits
+            from Coinbase's massive distribution and liquidity. Many users already hold USDC
+            on Base because it's where they on-ramp from fiat.
+          </p>
+
+          <h2>Kobaru: The Gateway That Makes It All Work</h2>
+
+          <p>
+            Multi-network support sounds simple in theory, but the infrastructure behind it
+            is anything but. This is where <a href="https://kobaru.io" target="_blank"
+            rel="noopener noreferrer">Kobaru</a> comes in. Kobaru is the x402 payment
+            gateway that handles the hard parts &mdash; settlement, gas fees, chain
+            routing, and transaction verification &mdash; so publishers don't have to.
+          </p>
+
+          <p>
+            Kobaru's core mission is to abstract blockchain complexity away from merchants
+            and publishers. A publisher integrating Paperwall never touches a private key,
+            never worries about which RPC endpoint to use, and never pays gas fees out of
+            pocket. Kobaru covers all network fees and bundles them into its service,
+            meaning the publisher receives the full payment amount regardless of which
+            chain the reader pays from.
+          </p>
+
+          <blockquote>
+            "Monetize any API without rewriting a single line of backend code."
+            &mdash; <a href="https://kobaru.io" target="_blank" rel="noopener noreferrer">kobaru.io</a>
+          </blockquote>
+
+          <p>
+            Built by payment industry veterans, Kobaru runs on edge infrastructure across
+            more than 100 datacenters worldwide. When a reader clicks "pay" on this article,
+            the signed authorization reaches a Kobaru node in milliseconds. That node
+            validates the payment, settles on-chain, and returns a receipt &mdash; all with
+            sub-second finality. The publisher's integration is a single
+            <code>&lt;script&gt;</code> tag. Everything else is handled by the gateway.
+          </p>
+
+          <h2>The Publisher's Perspective</h2>
+
+          <p>
+            For publishers, supporting multiple networks is a one-line configuration change.
+            Instead of specifying a single <code>data-network</code> attribute, they provide
+            a <code>data-accepts</code> JSON array listing each chain they're willing to
+            receive payment on. Kobaru's gateway handles settlement on whichever chain the
+            reader uses &mdash; the publisher doesn't need separate infrastructure per chain.
+          </p>
+
+          <p>
+            This matters for reach. A publisher who only accepts SKALE payments misses every
+            reader whose USDC sits on Base. A publisher who only accepts Base payments misses
+            readers who prefer zero-gas transactions. By accepting both, the publisher
+            maximizes the pool of readers who can pay without friction. And because Kobaru
+            abstracts the multi-chain complexity, adding a new network is as simple as
+            adding another entry to the <code>data-accepts</code> array.
+          </p>
+
+          <h2>What Happens Under the Hood</h2>
+
+          <p>
+            The technical flow is worth understanding. When the extension detects a
+            multi-network signal, it fetches the reader's USDC balance on each listed chain
+            via RPC calls. These balance checks happen in parallel &mdash; one
+            <code>eth_call</code> per network &mdash; so the latency is determined by the
+            slowest chain, not the sum of all chains.
+          </p>
+
+          <p>
+            Once balances are known, a priority-based selector picks the best option. SKALE
+            testnet has the highest priority (zero fees make it the cheapest settlement),
+            followed by Base Sepolia. If the reader has sufficient balance on the
+            highest-priority chain, that's the one used. If not, the selector falls through
+            to the next option.
+          </p>
+
+          <p>
+            The signed payment is then sent to Kobaru's gateway, which handles the
+            on-chain settlement. The x402 protocol standardization means publishers
+            implement once and support multiple payment networks automatically &mdash;
+            Kobaru takes care of the chain-specific details, gas sponsorship, and
+            transaction finality on every supported network.
+          </p>
+
+          <h2>Try It Yourself</h2>
+
+          <p>
+            If you have the Paperwall extension installed, this article is gated behind a
+            $0.01 micropayment. Fund your extension wallet with testnet USDC on either
+            SKALE Testnet or Base Sepolia, and click pay. The extension will automatically
+            select whichever chain has your balance.
+          </p>
+
+          <p>
+            To get testnet USDC: use the
+            <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer">Circle faucet</a>
+            to get USDC on Base Sepolia, then bridge it to SKALE via the
+            <a href="https://base-sepolia.skalenodes.com/bridge" target="_blank" rel="noopener noreferrer">SKALE bridge portal</a>
+            &mdash; or keep it on Base Sepolia and pay directly from there.
+          </p>
+
+          <p>
+            Multi-chain micropayments remove the last remaining friction in the payment flow.
+            Readers no longer need to be on the "right" chain. They just need a balance,
+            anywhere.
+          </p>
+        </div>
+
+      </article>
+
+      <!-- Sidebar -->
+      <aside class="article-sidebar" aria-label="Sidebar">
+        <div class="paperwall-ad paperwall-ad--sidebar" role="complementary" aria-label="Advertisement sidebar">
+          <span class="paperwall-ad__label">Advertisement</span>
+          <div class="paperwall-ad__content">
+            <strong>MultiWallet</strong>
+            One wallet, every chain. Manage your assets across SKALE, Base, Ethereum, and more.
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="site-footer__inner">
+      <p class="site-footer__copy">
+        &copy; 2026 The Daily Paper. This is a demo site for
+        <strong>Paperwall</strong> &mdash; micropayment-powered ad-free browsing.
+      </p>
+      <a href="https://github.com/nicholasgriffintn/paperwall"
+         class="site-footer__badge"
+         target="_blank"
+         rel="noopener noreferrer">
+        Powered by Paperwall
+      </a>
+    </div>
+  </footer>
+
+  <!-- Paperwall SDK (testnet-only: SKALE Testnet + Base Sepolia) -->
+  <script src="../js/paperwall-sdk.js"
+    data-facilitator-url="https://gateway.kobaru.io"
+    data-pay-to="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7"
+    data-price="10000"
+    data-accepts='[
+      {"network":"eip155:324705682"},
+      {"network":"eip155:84532"}
+    ]'
+  ></script>
+
+  <!-- Paperwall: Ad removal on successful payment -->
+  <script>
+    (function () {
+      'use strict';
+
+      /**
+       * Hides all .paperwall-ad elements and shows the thank-you banner.
+       * Called when the Paperwall extension confirms a successful payment.
+       */
+      function removeAdsAndThank() {
+        var ads = document.querySelectorAll('.paperwall-ad');
+        for (var i = 0; i < ads.length; i++) {
+          ads[i].setAttribute('aria-hidden', 'true');
+        }
+
+        var banner = document.getElementById('thankyou-banner');
+        if (banner) {
+          banner.setAttribute('aria-hidden', 'false');
+          banner.style.display = 'block';
+        }
+      }
+
+      /**
+       * Listen for PAPERWALL_PAYMENT_RESULT messages from the extension
+       * (relayed through the SDK messaging layer).
+       */
+      window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type !== 'PAPERWALL_PAYMENT_RESULT') return;
+        if (!data.success) return;
+
+        removeAdsAndThank();
+      });
+
+      // SDK is auto-initialized by the <script> tag's data- attributes.
+      // The message listener above handles payment success callbacks.
+    })();
+  </script>
+
+</body>
+</html>
