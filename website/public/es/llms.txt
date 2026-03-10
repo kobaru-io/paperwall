@@ -9,7 +9,7 @@ Los editores agregan una etiqueta de script. Los lectores pagan centavos. Los ag
 - Pagina principal: https://paperwall.app/es
 - Demo: https://paperwall.app/es/demo
 - GitHub: https://github.com/kobaru/paperwall
-- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm SDK: https://www.npmjs.com/package/@kobaru/paperwall-sdk
 - npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
 - Documentacion: https://github.com/kobaru/paperwall/tree/main/docs
 

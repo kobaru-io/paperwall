@@ -82,11 +82,11 @@ export default async function DemoPage({ params }: { params: Promise<{ locale: s
       </div>
 
       <Script
-        src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+        src="https://cdn.jsdelivr.net/npm/@kobaru/paperwall-sdk@latest/dist/index.iife.js"
         data-facilitator-url="https://gateway.kobaru.io"
         data-pay-to="0x0000000000000000000000000000000000000000"
         data-price="10000"
-        data-network="eip155:324705682"
+        data-accepts='[{"network":"eip155:324705682"},{"network":"eip155:84532"}]'
         strategy="lazyOnload"
       />
     </section>

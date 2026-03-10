@@ -61,7 +61,7 @@ export default function GetStarted() {
                 {t('publisherDesc')}
               </p>
               <pre className="mb-6 max-w-lg overflow-x-auto break-all whitespace-pre-wrap border border-white/20 bg-white/10 p-3 text-xs font-bold">
-                <code>{'<script src="https://paperwall.app/publisher-sdk.js"></script>'}</code>
+                <code>{'<script src="https://cdn.jsdelivr.net/npm/@kobaru/paperwall-sdk@latest/dist/index.iife.js"></script>'}</code>
               </pre>
             </div>
             <div>

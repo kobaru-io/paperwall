@@ -123,7 +123,7 @@
     "articlePreview": "What if you could pay a penny to read any article on the internet? No subscriptions, no ads, no tracking. Just a tiny payment and instant access.",
     "articleBody1": "For decades, the web has been stuck in a broken monetization cycle. Publishers plaster their sites with ads, users install ad-blockers, and everyone loses. Subscriptions emerged as an alternative, but they create their own problems — subscription fatigue, paywalls that block casual readers, and an internet increasingly divided between those who pay and those who don’t.",
     "articleBody2": "Micropayments offer a third path. Imagine paying just one cent to read a single article. At that price, a $5 deposit lasts for 500 articles — months of reading for most people. Publishers earn more per reader than they would from ads, and readers get a clean, ad-free experience without committing to monthly subscriptions.",
-    "articleBody3": "The technology finally exists to make this work. Ultra-low-fee blockchain networks like SKALE have reduced transaction costs to near zero, making sub-cent payments economically viable for the first time. Combined with the x402 protocol — which brings native payments to HTTP — we now have the infrastructure for a web where content creators are fairly compensated and readers pay only for what they consume.",
+    "articleBody3": "The technology finally exists to make this work. Ultra-low-fee blockchain networks like SKALE and Base have reduced transaction costs to near zero, making sub-cent payments economically viable for the first time. Paperwall supports multiple networks simultaneously — readers pay from whichever chain holds their balance, and the protocol picks the best option automatically. Combined with the x402 protocol — which brings native payments to HTTP — we now have the infrastructure for a web where content creators are fairly compensated and readers pay only for what they consume.",
     "articleBody4": "This is what the Paperwall protocol enables. One script tag for publishers. One browser extension for readers. One CLI tool for AI agents. An open, composable toolkit that turns the promise of micropayments into reality — and that anyone can build on, extend, or self-host."
   },
   "notFound": {
@@ -203,7 +203,7 @@
     "walletTitle": "3. Your Wallet",
     "walletBody": "When you use the Chrome extension or CLI agent, a crypto wallet is created on your device. Your private keys are encrypted locally and never leave your device unless you explicitly export them. You are solely responsible for securing your password and any backup of your private keys. Lost keys cannot be recovered by Kobaru or anyone else.",
     "paymentsTitle": "4. Payments",
-    "paymentsBody": "Payments are made in USDC on the SKALE network. When you approve a payment, you sign an EIP-712 authorization that allows a facilitator to submit the transfer on-chain. Transactions are final and irreversible. Publishers set their own prices. Paperwall does not take a cut from content payments.",
+    "paymentsBody": "Payments are made in USDC on supported blockchain networks, currently SKALE and Base. When you approve a payment, you sign an EIP-712 authorization that allows a facilitator to submit the transfer on-chain. Transactions are final and irreversible. Publishers set their own prices. Paperwall does not take a cut from content payments.",
     "facilitatorTitle": "5. Facilitator Service",
     "facilitatorBody": "Kobaru operates a default facilitator service that processes payment settlements. The facilitator submits signed authorizations to the blockchain on behalf of users. Facilitators may charge processing fees. You can choose to use a different facilitator or run your own.",
     "openSourceTitle": "6. Open Source",
@@ -229,7 +229,7 @@
     "websiteTitle": "4. This Website",
     "websiteBody": "The paperwall.app website does not use cookies, analytics, or tracking scripts. It is a static site that does not collect any visitor data. No personal information is required to use any part of the website.",
     "blockchainTitle": "5. Blockchain Transactions",
-    "blockchainBody": "Payments are settled on the SKALE blockchain. Blockchain transactions are public by nature — anyone can see the sender address, receiver address, and amount. However, Paperwall does not link wallet addresses to real-world identities. Your wallet address is pseudonymous.",
+    "blockchainBody": "Payments are settled on supported blockchain networks (currently SKALE and Base). Blockchain transactions are public by nature — anyone can see the sender address, receiver address, and amount. However, Paperwall does not link wallet addresses to real-world identities. Your wallet address is pseudonymous.",
     "thirdPartyTitle": "6. Third-Party Services",
     "thirdPartyBody": "When using the default facilitator (gateway.kobaru.io), payment authorizations are sent to Kobaru's server for on-chain settlement. The facilitator processes the transaction data needed to submit it to the blockchain — sender address, receiver address, amount, and cryptographic signature. No additional personal data is collected. Publishers who receive your payments see only your wallet address and the payment amount.",
     "changesTitle": "7. Changes to This Policy",

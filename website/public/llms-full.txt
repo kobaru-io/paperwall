@@ -10,7 +10,7 @@ Built by Kobaru. Licensed under GPL-3.0.
 - Homepage: https://paperwall.app
 - Demo: https://paperwall.app/demo
 - GitHub: https://github.com/kobaru/paperwall
-- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm SDK: https://www.npmjs.com/package/@kobaru/paperwall-sdk
 - npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
 - Documentation: https://github.com/kobaru/paperwall/tree/main/docs
 
@@ -20,8 +20,8 @@ Built by Kobaru. Licensed under GPL-3.0.
 3. Content unlocks instantly. Publisher gets paid immediately.
 
 The system uses the x402 protocol, which brings native payments to HTTP.
-Payments are processed on the SKALE blockchain network, which has ultra-low
-transaction fees, making sub-cent payments economically viable.
+Payments are processed on supported blockchain networks (currently SKALE and Base),
+which have ultra-low transaction fees, making sub-cent payments economically viable.
 
 Payment flow: Reader signs an EIP-712 typed data message. A facilitator
 service submits the transaction on-chain using EIP-3009
@@ -33,17 +33,17 @@ Add one line of code to your HTML:
 
 ```html
 <script
-  src="https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js"
+  src="https://cdn.jsdelivr.net/npm/@kobaru/paperwall-sdk@latest/dist/index.iife.js"
   data-facilitator-url="https://gateway.kobaru.io"
   data-pay-to="YOUR_WALLET_ADDRESS"
   data-price="10000"
-  data-network="eip155:324705682"
+  data-accepts='[{"network":"eip155:324705682"},{"network":"eip155:84532"}]'
 ></script>
 ```
 
 - `data-pay-to`: Your Ethereum wallet address (receives USDC payments)
 - `data-price`: Price in USDC micro-units (10000 = $0.01)
-- `data-network`: CAIP-2 network ID (default is SKALE Base Sepolia testnet)
+- `data-accepts`: JSON array of accepted networks (e.g., `[{"network":"eip155:324705682"},{"network":"eip155:84532"}]`). For single network, use `data-network` with a CAIP-2 network ID.
 - `data-facilitator-url`: Payment processing endpoint
 
 The SDK is ~5 KB and works with any website. No backend needed.
@@ -107,7 +107,7 @@ Environment variables:
 - Publishers set their own prices (typically $0.01 to $0.10 per article)
 - Publishers keep 100% of payments. No middlemen.
 - A $5 deposit lasts for 500 articles at $0.01 each
-- Transaction fees on SKALE are ultra-low (near zero)
+- Transaction fees on SKALE are ultra-low (lower than Base) and on Base are near-zero
 - No monthly subscriptions required
 - No minimum commitment
 
@@ -145,9 +145,9 @@ A: Add a single script tag to your HTML. It takes less than 60 seconds.
 
 ## Technical Overview
 - Protocol: x402 (HTTP native payments)
-- Blockchain: SKALE (ultra-low fee EVM chain)
-- Token: USDC (bridged via SKALE Bridge)
-- Chain ID: eip155:324705682 (SKALE Base Sepolia testnet)
+- Blockchains: SKALE (ultra-low-fee EVM chain) and Base (low-fee L2)
+- Token: USDC (bridged to each supported network)
+- Default Chain IDs: eip155:324705682 (SKALE Testnet), eip155:84532 (Base Sepolia), eip155:1187947933 (SKALE Mainnet), eip155:8453 (Base Mainnet)
 - Signing: EIP-712 typed data + EIP-3009 TransferWithAuthorization
 - SDK size: ~5 KB (IIFE bundle)
 - Extension: Chrome MV3 (Manifest V3)

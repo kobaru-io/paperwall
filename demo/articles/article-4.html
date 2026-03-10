@@ -118,8 +118,8 @@
           <aside class="paperwall-ad paperwall-ad--inline" role="complementary" aria-label="Advertisement inline">
             <span class="paperwall-ad__label">Advertisement</span>
             <div class="paperwall-ad__content">
-              <strong>SKALE Network &mdash; Zero Gas Fees</strong>
-              Build without transaction costs. Deploy your dApp on SKALE today.
+              <strong>SKALE Network &mdash; Ultra-Low Gas Fees</strong>
+              Build with near-zero transaction costs. Deploy your dApp on SKALE today.
             </div>
           </aside>
 
@@ -133,11 +133,10 @@
           </p>
 
           <p>
-            SKALE operates as an application-specific chain with zero gas fees. Every
-            transaction &mdash; whether it's a USDC transfer or a contract interaction
-            &mdash; costs the user nothing in network fees. This makes it ideal for
-            micropayments where even a fraction of a cent in gas would erode the payment's
-            value.
+            SKALE operates as a SKALE chain on Base with ultra-low gas fees &mdash; lower
+            than Base itself. Every transaction, whether it's a USDC transfer or a contract
+            interaction, costs a fraction of a cent. This makes it ideal for micropayments
+            where gas fees need to be as small as possible to preserve the payment's value.
           </p>
 
           <p>
@@ -193,7 +192,7 @@
           <p>
             This matters for reach. A publisher who only accepts SKALE payments misses every
             reader whose USDC sits on Base. A publisher who only accepts Base payments misses
-            readers who prefer zero-gas transactions. By accepting both, the publisher
+            readers who prefer ultra-low-fee transactions. By accepting both, the publisher
             maximizes the pool of readers who can pay without friction. And because Kobaru
             abstracts the multi-chain complexity, adding a new network is as simple as
             adding another entry to the <code>data-accepts</code> array.
@@ -211,7 +210,7 @@
 
           <p>
             Once balances are known, a priority-based selector picks the best option. SKALE
-            testnet has the highest priority (zero fees make it the cheapest settlement),
+            testnet has the highest priority (ultra-low fees make it the cheapest settlement),
             followed by Base Sepolia. If the reader has sufficient balance on the
             highest-priority chain, that's the one used. If not, the selector falls through
             to the next option.

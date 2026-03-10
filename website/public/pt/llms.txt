@@ -9,7 +9,7 @@ Editores adicionam uma tag de script. Leitores pagam centavos. Agentes de IA usa
 - Pagina inicial: https://paperwall.app/pt
 - Demo: https://paperwall.app/pt/demo
 - GitHub: https://github.com/kobaru/paperwall
-- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm SDK: https://www.npmjs.com/package/@kobaru/paperwall-sdk
 - npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
 - Documentacao: https://github.com/kobaru/paperwall/tree/main/docs
 

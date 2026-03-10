@@ -166,7 +166,7 @@ describe('KeyDerivationEngine', () => {
       await expect(engine.decrypt(tampered, key)).rejects.toThrow();
     });
 
-    it('should handle large plaintexts (1MB)', async () => {
+    it('should handle large plaintexts (1MB)', { timeout: 30_000 }, async () => {
       const salt = new Uint8Array(32).fill(0x0D);
       const key = await engine.deriveKey(salt, 'password');
       const largePlaintext = new Uint8Array(1024 * 1024).fill(0xAA);

@@ -9,7 +9,7 @@ Publishers add one script tag. Readers pay pennies. AI agents use a CLI.
 - Homepage: https://paperwall.app
 - Demo: https://paperwall.app/demo
 - GitHub: https://github.com/kobaru/paperwall
-- npm SDK: https://www.npmjs.com/package/@paperwall/sdk
+- npm SDK: https://www.npmjs.com/package/@kobaru/paperwall-sdk
 - npm CLI: https://www.npmjs.com/package/@kobaru/paperwall
 - Documentation: https://github.com/kobaru/paperwall/tree/main/docs
 

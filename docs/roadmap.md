@@ -6,9 +6,9 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 ## What Already Works
 
-**Version:** 0.2.0 (Testnet)
-**Status:** Fully functional on SKALE testnet
-**Date:** February 2026
+**Version:** 0.3.0 (Multi-Network)
+**Status:** Live on SKALE Mainnet and Base
+**Date:** March 2026
 
 ✅ **Publisher SDK**
 
@@ -21,7 +21,7 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 - Wallet creation and management
 - Password-encrypted private keys (PBKDF2 + AES-256-GCM)
-- USDC balance display (SKALE testnet)
+- USDC balance display (SKALE + Base)
 - EIP-712 payment signing
 - Payment history tracking (1000 record cap)
 - Settings tab, about section, history tab, stats tab
@@ -29,6 +29,13 @@ This document outlines development priorities for Paperwall, organized by timeli
 - Chrome Web Store published ([install here](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako))
 - Firefox and Firefox for Android support (published on Firefox Add-ons)
 - Microsoft Edge support (install from Chrome Web Store)
+
+✅ **Multi-Network Support**
+
+- SKALE Mainnet — gasless USDC transfers
+- Base (Coinbase L2) — alternative network option
+- Multi-network publisher SDK (`data-accepts` array)
+- Automatic network selection based on reader funds
 
 ✅ **Payment Flow**
 
@@ -57,10 +64,10 @@ This document outlines development priorities for Paperwall, organized by timeli
 - Demo news blog with Paperwall integration
 - Ad removal on payment
 - End-to-end working flow (3 demo articles)
+- CDN distribution via jsdelivr
 
 ### Current Limitations
 
-⚠️ **SKALE testnet only** - Use test funds, not real money
 ⚠️ **USDC only** - No support for ETH or other tokens
 ⚠️ **Fixed pricing** - No dynamic pricing or time-based access
 ⚠️ **Client-side trust** - Honor system for ad removal (Tier 1 mode only)
@@ -71,11 +78,10 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 **Goal:** Production-ready for early adopter publishers
 
-### 1. Production Deployment
+### 1. Store Approvals
 
-- **SKALE Mainnet support** - Real USDC payments
-- **CDN distribution** - unpkg/jsdelivr auto-hosting
-- **Chrome Web Store** - Extension published ([install here](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako))
+- **Mozilla Add-ons approval** - Pending store review
+- **Microsoft Edge Add-ons approval** - Pending store review
 
 ### 2. Kobaru Console Integration
 
@@ -94,16 +100,6 @@ This document outlines development priorities for Paperwall, organized by timeli
 - **Per-site budgets** - "Auto-pay up to $1/month on example.com"
 - **Daily spending limits** - "Max $5/day across all sites"
 - **Total budget cap** - "Stop at $50 lifetime"
-
-### 2. Additional Networks
-
-- **Base (Coinbase L2)** - Alternative to SKALE
-
-### 3. Multi-Browser Support ✅
-
-- **Edge support** ✅ (Chromium-based, available on Chrome Web Store)
-- **Firefox extension** ✅ (Manifest V3, available on Firefox Add-ons)
-- **Firefox for Android** ✅ (version 142+)
 
 ---
 

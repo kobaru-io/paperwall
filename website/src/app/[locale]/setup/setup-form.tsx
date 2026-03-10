@@ -23,11 +23,9 @@ interface Config {
 
 // -- Constants ---
 
-// Switch to jsDelivr once @paperwall/sdk is published to npm:
-// https://cdn.jsdelivr.net/npm/@paperwall/sdk/dist/index.iife.js
 const SDK_URL =
   process.env.NEXT_PUBLIC_SDK_URL ??
-  'https://paperwall.app/publisher-sdk.js';
+  'https://cdn.jsdelivr.net/npm/@kobaru/paperwall-sdk@latest/dist/index.iife.js';
 
 // -- Helpers ---
 

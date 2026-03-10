@@ -76,7 +76,7 @@ sequenceDiagram
 
 **Key features:**
 
-- **Ultra-low fees** -- SKALE and Base networks have ultra-low transaction costs
+- **Ultra-low fees** -- SKALE and Base networks have low transaction costs
 - **True micropayments** -- charge as little as $0.001 per article
 - **No account signup** -- readers just install the extension and set a password
 - **Private key never leaves your device** -- wallet is encrypted locally (multiple modes: password, env-injected for containers, machine-bound for local)
