@@ -32,8 +32,8 @@ This command builds all packages in the monorepo. The extension build specifical
 
 After a successful build, two directories are produced inside `packages/extension/`:
 
-**`packages/extension/dist/`** — Chrome and Microsoft Edge distribution
-- `background.js` — Service worker (IIFE format, Chrome 120+ / Firefox 121+)
+**`packages/extension/dist-chrome/`** — Chrome and Microsoft Edge distribution
+- `background.js` — Service worker (IIFE format, Chrome 120+ / Firefox 140+)
 - `content-script.js` — Content script
 - `popup.js` — Popup UI
 - `popup.html` — Popup HTML
@@ -41,55 +41,46 @@ After a successful build, two directories are produced inside `packages/extensio
 - `manifest.json` — MV3 manifest (dual-browser: Chrome service_worker + Firefox scripts)
 - `icons/` — Extension icons (16px, 32px, 48px, 128px)
 
-**`packages/extension/dist-firefox/`** — Firefox distribution (same JS/HTML/CSS files as dist/, but with .map files removed and sourceMappingURL comments stripped from JS files)
+**`packages/extension/dist-firefox/`** — Firefox distribution (same JS/HTML/CSS files as dist-chrome/, but with .map files removed and sourceMappingURL comments stripped from JS files)
 
 ### 4. Verify the output
 
 ```bash
-ls packages/extension/dist/
+ls packages/extension/dist-chrome/
 ls packages/extension/dist-firefox/
 ```
 
-`dist/` should contain: `background.js`, `background.js.map`, `content-script.js`, `content-script.js.map`, `popup.js`, `popup.js.map`, `popup.html`, `styles.css`, `manifest.json`, `icons/`
+`dist-chrome/` should contain: `background.js`, `background.js.map`, `content-script.js`, `content-script.js.map`, `popup.js`, `popup.js.map`, `popup.html`, `styles.css`, `manifest.json`, `icons/`
 
 `dist-firefox/` should contain: `background.js`, `content-script.js`, `popup.js`, `popup.html`, `styles.css`, `manifest.json`, `icons/` (no `.map` files; `sourceMappingURL` tail comments are also stripped from the JS files)
 
 ### 5. Package for submission
 
-**Firefox (.xpi):**
+Run from the **repository root** (`paperwall/`):
+
 ```bash
-cd packages/extension/dist-firefox
-zip -r ../paperwall-firefox.xpi .
-cd ../../..
+npm run pack:ext
 ```
 
-The resulting `packages/extension/paperwall-firefox.xpi` is the file to upload to addons.mozilla.org.
+This generates all three artifacts in `packages/extension/releases/`:
 
-**Chrome / Edge (.zip):**
-```bash
-cd packages/extension/dist
-zip -r ../paperwall-chrome.zip .
-cd ../../..
-```
+| File | Destination |
+|------|-------------|
+| `paperwall-chrome.zip` | Chrome Web Store / Microsoft Edge Add-ons (Partner Center) |
+| `paperwall-firefox.xpi` | addons.mozilla.org (AMO) |
+| `paperwall-source.zip` | AMO source code submission (required for bundled extensions) |
 
-The resulting `packages/extension/paperwall-chrome.zip` is the file to upload to the Microsoft Edge Add-ons store (Partner Center).
-
-## Source Code Submission (AMO Requirement)
-
-AMO requires source code submission for extensions built with bundlers. Attach the following zip to the AMO upload:
-
-Run from the **repository root** (`paperwall/`). The resulting `paperwall-source.zip` is created at the repository root.
+The `releases/` directory is git-ignored. To build and package in one step:
 
 ```bash
-cd /path/to/paperwall
-zip -r paperwall-source.zip packages/extension/src/ packages/extension/__tests__/ packages/extension/icons/ packages/extension/manifest.json packages/extension/build.ts packages/extension/package.json packages/extension/tsconfig.json packages/extension/BUILD.md package.json package-lock.json --exclude "*/node_modules/*" --exclude "*/.git/*"
+npm run build && npm run pack:ext
 ```
 
 ## Notes
 
-- The extension uses [esbuild](https://esbuild.github.io/) (via `tsx`) for bundling. All background, content, and popup scripts are bundled to IIFE format targeting Chrome 120 and Firefox 121.
-- The `dist-firefox/` directory is produced by copying `dist/` after the build completes. The two directories differ: `dist/` retains `.map` files and `sourceMappingURL` comments for developer convenience, while `dist-firefox/` has all `.map` files deleted and all `sourceMappingURL` tail comments stripped from the JS files (current behavior, implemented in `build.ts`).
-- `.map` files (`background.js.map`, `content-script.js.map`, `popup.js.map`) are present in `dist/` only. **Important hygiene note:** esbuild's `sourcemap: true` setting embeds the full TypeScript source of every bundled module inside these `.map` files via the `sourcesContent` field — an AMO reviewer can read the complete original source through the `.map` files included in the `.xpi`. This is acceptable and beneficial for AMO review (reviewers can verify the bundled output matches the declared source), but it means **secrets must never appear in any source file that gets bundled** (e.g. hardcoded private keys, API tokens, or credentials), because they would be fully visible in the distributed `.map` files.
+- The extension uses [esbuild](https://esbuild.github.io/) (via `tsx`) for bundling. All background, content, and popup scripts are bundled to IIFE format targeting Chrome 120 and Firefox 140.
+- The `dist-firefox/` directory is produced by copying `dist-chrome/` after the build completes. The two directories differ: `dist-chrome/` retains `.map` files and `sourceMappingURL` comments for developer convenience, while `dist-firefox/` has all `.map` files deleted and all `sourceMappingURL` tail comments stripped from the JS files (current behavior, implemented in `build.ts`).
+- `.map` files (`background.js.map`, `content-script.js.map`, `popup.js.map`) are present in `dist-chrome/` only. **Important hygiene note:** esbuild's `sourcemap: true` setting embeds the full TypeScript source of every bundled module inside these `.map` files via the `sourcesContent` field — an AMO reviewer can read the complete original source through the `.map` files included in the `.xpi`. This is acceptable and beneficial for AMO review (reviewers can verify the bundled output matches the declared source), but it means **secrets must never appear in any source file that gets bundled** (e.g. hardcoded private keys, API tokens, or credentials), because they would be fully visible in the distributed `.map` files.
 - The manifest (`manifest.json`) uses a dual `background` key strategy: `service_worker` for Chrome/Edge and `scripts` for Firefox. Both browsers ignore the key they do not support.
 
 ## Manifest Fields
@@ -100,4 +91,4 @@ The `browser_specific_settings.gecko.data_collection_permissions` field inside `
 
 **Source:** https://blog.mozilla.org/addons/2025/10/23/data-collection-consent-changes-for-new-firefox-extensions/
 
-Chrome and Edge ignore unrecognized keys inside `browser_specific_settings`, so this field does not affect Chrome/Edge behaviour. The `dist/manifest.json` used for Chrome/Edge distribution has `browser_specific_settings` stripped entirely by the build script (see `build.ts`), so Chrome will never see this field at all.
+Chrome and Edge ignore unrecognized keys inside `browser_specific_settings`, so this field does not affect Chrome/Edge behaviour. The `dist-chrome/manifest.json` used for Chrome/Edge distribution has `browser_specific_settings` stripped entirely by the build script (see `build.ts`), so Chrome will never see this field at all.

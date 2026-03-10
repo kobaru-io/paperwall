@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const distDir = path.resolve(__dirname, '../dist');
+const distDir = path.resolve(__dirname, '../dist-chrome');
 const distFirefoxDir = path.resolve(__dirname, '../dist-firefox');
 const buildExists = fs.existsSync(distDir) && fs.existsSync(distFirefoxDir);
 

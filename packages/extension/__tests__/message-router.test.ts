@@ -27,7 +27,7 @@ vi.stubGlobal('chrome', {
   },
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorageMock._reset();
   sessionStorageMock._reset();
   vi.clearAllMocks();
@@ -36,7 +36,7 @@ beforeEach(() => {
     `chrome-extension://test-extension-id/${path}`
   );
   // Reset brute-force state to prevent leakage between describe blocks
-  _resetBruteForceStateForTest();
+  await _resetBruteForceStateForTest();
 });
 
 // ── Helper ──────────────────────────────────────────────────────────
@@ -218,23 +218,17 @@ describe('message-router', () => {
   });
 
   describe('UNLOCK_WALLET brute-force lockout', () => {
-    async function resetLockoutState(): Promise<void> {
-      _resetBruteForceStateForTest();
-      await sendMessage({ type: 'CREATE_WALLET', password: 'reset-pw' });
-      const unlockResult = await sendMessage({ type: 'UNLOCK_WALLET', password: 'reset-pw' });
-      if (!unlockResult.success) {
-        throw new Error(`resetLockoutState: UNLOCK_WALLET failed: ${JSON.stringify(unlockResult)}`);
-      }
-    }
-
-    // Ensure brute-force counter is reset before every test in this suite
-    // to prevent state leakage between tests (e.g. if a prior test fails mid-way).
+    // Reset brute-force counter and clear all storage so each test starts
+    // with a clean slate and can create its own wallet without collision.
     beforeEach(async () => {
-      await resetLockoutState();
+      await _resetBruteForceStateForTest();
+      localStorageMock._reset();
+      sessionStorageMock._reset();
     });
 
     it('shows decreasing attempts remaining', async () => {
-      await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
       sessionStorageMock._reset();
 
       const r1 = await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong' });
@@ -251,7 +245,8 @@ describe('message-router', () => {
     });
 
     it('locks wallet after 5 consecutive wrong password attempts', async () => {
-      await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
       sessionStorageMock._reset();
 
       // 4 wrong attempts — should get "N attempts remaining"
@@ -268,7 +263,8 @@ describe('message-router', () => {
     });
 
     it('rejects correct password during lockout period', async () => {
-      await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
       sessionStorageMock._reset();
 
       // Trigger lockout
@@ -283,17 +279,105 @@ describe('message-router', () => {
     });
 
     it('accepts correct password after lockout period expires', async () => {
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
+      sessionStorageMock._reset();
+
       // Trigger lockout with 5 wrong attempts
       for (let i = 0; i < 5; i++) {
         await sendMessage({ type: 'UNLOCK_WALLET', password: 'wrong-pw' });
       }
 
       // Directly reset the lockout (simulating time passage without wall-clock wait)
-      _resetBruteForceStateForTest();
+      await _resetBruteForceStateForTest();
 
-      // Correct password must succeed after reset
-      const response = await sendMessage({ type: 'UNLOCK_WALLET', password: 'reset-pw' });
+      // Correct password must succeed after reset using this test's own wallet password
+      const response = await sendMessage({ type: 'UNLOCK_WALLET', password: 'correct-pw' });
       expect(response.success).toBe(true);
+    });
+  });
+
+  describe('UNLOCK_WALLET chrome.storage.session failure', () => {
+    it('returns error when session.get rejects (storage unavailable)', async () => {
+      await sendMessage({ type: 'CREATE_WALLET', password: 'pw' });
+      sessionStorageMock._reset();
+
+      // Simulate storage failure on session.get (e.g. Firefox Android memory pressure)
+      vi.spyOn(sessionStorageMock, 'get').mockRejectedValueOnce(new Error('Storage unavailable'));
+
+      const response = await sendMessage({ type: 'UNLOCK_WALLET', password: 'pw' });
+      expect(response.success).toBe(false);
+      expect(response.error).toBeDefined();
+      expect(typeof response.error).toBe('string');
+      expect((response.error as string).length).toBeGreaterThan(0);
+    });
+
+    it('returns error when session.set rejects (storage unavailable)', async () => {
+      await sendMessage({ type: 'CREATE_WALLET', password: 'pw' });
+      sessionStorageMock._reset();
+
+      // Allow session.get to succeed (for brute-force state read) but fail on session.set
+      // (which stores the decrypted private key after successful decrypt)
+      vi.spyOn(sessionStorageMock, 'set').mockRejectedValueOnce(new Error('Storage unavailable'));
+
+      const response = await sendMessage({ type: 'UNLOCK_WALLET', password: 'pw' });
+      expect(response.success).toBe(false);
+      expect(response.error).toBeDefined();
+      expect(typeof response.error).toBe('string');
+      expect((response.error as string).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('EXPORT_PRIVATE_KEY brute-force lockout', () => {
+    beforeEach(async () => {
+      await _resetBruteForceStateForTest();
+      localStorageMock._reset();
+      sessionStorageMock._reset();
+    });
+
+    it('increments attempt counter on wrong password', async () => {
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
+
+      const r1 = await sendMessage({ type: 'EXPORT_PRIVATE_KEY', password: 'wrong' });
+      expect(r1.success).toBe(false);
+      expect(r1.error).toContain('4 attempt');
+
+      const r2 = await sendMessage({ type: 'EXPORT_PRIVATE_KEY', password: 'wrong' });
+      expect(r2.success).toBe(false);
+      expect(r2.error).toContain('3 attempt');
+    });
+
+    it('locks wallet after 5 consecutive failed export attempts', async () => {
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
+
+      for (let i = 0; i < 4; i++) {
+        const r = await sendMessage({ type: 'EXPORT_PRIVATE_KEY', password: 'wrong' });
+        expect(r.success).toBe(false);
+        expect(r.error).toContain('remaining');
+      }
+
+      // 5th wrong attempt triggers lockout
+      const lockResponse = await sendMessage({ type: 'EXPORT_PRIVATE_KEY', password: 'wrong' });
+      expect(lockResponse.success).toBe(false);
+      expect(lockResponse.error).toContain('locked for 5 minutes');
+    });
+
+    it('export lockout also blocks UNLOCK_WALLET (shared counter)', async () => {
+      const createResult = await sendMessage({ type: 'CREATE_WALLET', password: 'correct-pw' });
+      expect(createResult.success).toBe(true);
+      sessionStorageMock._reset();
+
+      // Trigger lockout via EXPORT_PRIVATE_KEY
+      for (let i = 0; i < 5; i++) {
+        await sendMessage({ type: 'EXPORT_PRIVATE_KEY', password: 'wrong' });
+      }
+
+      // UNLOCK_WALLET should also be blocked by the shared lockout
+      const unlockResponse = await sendMessage({ type: 'UNLOCK_WALLET', password: 'correct-pw' });
+      expect(unlockResponse.success).toBe(false);
+      expect(unlockResponse.error).toContain('Too many attempts');
     });
   });
 

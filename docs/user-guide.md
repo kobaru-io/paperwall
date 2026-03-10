@@ -6,7 +6,7 @@ This guide helps you install the Paperwall browser extension so you can pay smal
 
 ## What is Paperwall?
 
-Paperwall is a small program you add to your Chrome browser. It creates a digital wallet on your computer that holds a small amount of money (USDC, a digital dollar). When you visit a website that uses Paperwall, you can choose to pay a few cents to read the article.
+Paperwall is a small program you add to your browser. It creates a digital wallet on your computer that holds a small amount of money (USDC, a digital dollar). When you visit a website that uses Paperwall, you can choose to pay a few cents to read the article.
 
 **Think of it like a coin jar for the internet.** You put a few dollars in, and every time you read an article, a penny or two comes out. At one cent per article, five dollars covers 500 articles.
 
@@ -32,8 +32,8 @@ Yes. Here is why:
 
 Before you start, make sure you have:
 
-- **Google Chrome browser** on your computer (version 120 or newer)
-- **A computer** (Windows, Mac, or Linux -- Paperwall does not work on phones yet)
+- **A supported browser:** Chrome 120+, Firefox 140+, or Microsoft Edge 120+ on Windows, Mac, or Linux
+- Firefox for Android (version 142+) is also supported. iOS Safari and Android Chrome are not yet supported.
 
 That's all you need to install the extension. To actually pay for content, you will also need some USDC on the SKALE testnet, which we cover in a later section.
 
@@ -41,7 +41,7 @@ That's all you need to install the extension. To actually pay for content, you w
 
 ## Step 1: Install the extension
 
-### Install from the Chrome Web Store
+### Chrome
 
 1. Open Chrome and visit the [Paperwall extension page](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako) on the Chrome Web Store
 2. Click the **"Add to Chrome"** button
@@ -49,11 +49,19 @@ That's all you need to install the extension. To actually pay for content, you w
 
 You should now see "Paperwall" listed on the extensions page with a small icon.
 
-### Pin the extension (recommended)
+### Microsoft Edge
+
+Edge can install extensions from the Chrome Web Store. Visit the [Paperwall extension page](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako), click **"Allow extensions from other stores"** if prompted, then click **"Add to Edge"**.
+
+### Firefox and Firefox for Android
+
+Install Paperwall from the [Firefox Add-ons page]. Firefox for Android (version 142+) is supported — install it the same way through Firefox on your Android device.
+
+### Pin the extension (recommended, Chrome and Edge)
 
 To make Paperwall easy to access:
 
-1. Click the **puzzle piece icon** in the top-right corner of Chrome (next to the address bar). This opens the extensions menu.
+1. Click the **puzzle piece icon** in the top-right corner of your browser (next to the address bar). This opens the extensions menu.
 2. Find **"Paperwall"** in the list.
 3. Click the **pin icon** next to it. The Paperwall icon now appears permanently in your toolbar.
 
@@ -311,4 +319,4 @@ If you run into a problem not covered here:
 | **SKALE** | The blockchain network that Paperwall uses -- it has zero transaction fees |
 | **Testnet** | A practice version of the blockchain that uses fake money for testing |
 | **Micropayment** | A very small payment, usually less than $1 |
-| **Extension** | A small program that adds features to your Chrome browser |
+| **Extension** | A small program that adds features to your browser (Chrome, Firefox, or Edge) |

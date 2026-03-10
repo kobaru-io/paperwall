@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 async function build() {
-  const distDir = 'dist';
+  const distDir = 'dist-chrome';
 
   // Ensure dist directory exists
   if (!fs.existsSync(distDir)) {
@@ -16,10 +16,10 @@ async function build() {
     bundle: true,
     format: 'iife',
     outfile: `${distDir}/background.js`,
-    target: ['chrome120', 'firefox121'],
+    target: ['chrome120', 'firefox140'],
     // Sourcemaps are generated for all bundles. The dist-firefox/ copy step below
     // strips all .map files from the Firefox distribution so they are not included
-    // in the .xpi submitted to AMO. The Chrome dist/ retains .map files for
+    // in the .xpi submitted to AMO. The Chrome dist-chrome/ retains .map files for
     // developer convenience. See the strip step after fs.cpSync below.
     sourcemap: true,
     define: { 'process.env.NODE_ENV': '"production"' },
@@ -31,7 +31,7 @@ async function build() {
     bundle: true,
     format: 'iife',
     outfile: `${distDir}/content-script.js`,
-    target: ['chrome120', 'firefox121'],
+    target: ['chrome120', 'firefox140'],
     sourcemap: true,
     define: { 'process.env.NODE_ENV': '"production"' },
   });
@@ -42,7 +42,7 @@ async function build() {
     bundle: true,
     format: 'iife',
     outfile: `${distDir}/popup.js`,
-    target: ['chrome120', 'firefox121'],
+    target: ['chrome120', 'firefox140'],
     sourcemap: true,
     define: { 'process.env.NODE_ENV': '"production"' },
   });
@@ -62,16 +62,19 @@ async function build() {
   copyFile('icons/icon-48.png', `${iconsDistDir}/icon-48.png`);
   copyFile('icons/icon-128.png', `${iconsDistDir}/icon-128.png`);
 
-  // Strip browser_specific_settings from Chrome distribution manifest.
-  // The gecko-specific fields (extension ID, strict_min_version, data_collection_permissions)
-  // are irrelevant noise for Chrome/Edge and can confuse Chrome's manifest parser.
-  // dist-firefox/ retains the full manifest with gecko fields.
+  // Strip Firefox-only fields from Chrome/Edge distribution manifest.
+  // - browser_specific_settings: gecko-specific, ignored/noise for Chrome/Edge
+  // - background.scripts: MV3 Chrome/Edge only support service_worker; scripts field
+  //   causes Edge validation error "background.scripts cannot be used with manifest_version 3"
+  // dist-firefox/ retains the full manifest with both fields.
   const chromeManifestPath = path.join(distDir, 'manifest.json');
   const chromeManifest = JSON.parse(fs.readFileSync(chromeManifestPath, 'utf-8')) as Record<string, unknown>;
   delete chromeManifest['browser_specific_settings'];
+  const bg = chromeManifest['background'] as Record<string, unknown> | undefined;
+  if (bg) delete bg['scripts'];
   fs.writeFileSync(chromeManifestPath, JSON.stringify(chromeManifest, null, 2) + '\n');
 
-  // Copy dist/ to dist-firefox/ (retains full manifest with gecko fields)
+  // Copy dist-chrome/ to dist-firefox/ (retains full manifest with gecko fields)
   const distFirefoxDir = 'dist-firefox';
   if (fs.existsSync(distFirefoxDir)) {
     fs.rmSync(distFirefoxDir, { recursive: true, force: true });

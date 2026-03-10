@@ -17,7 +17,7 @@ This document outlines development priorities for Paperwall, organized by timeli
 - Payment callbacks for ad removal
 - x402 v2 protocol compliant
 
-✅ **Chrome Extension**
+✅ **Browser Extension**
 
 - Wallet creation and management
 - Password-encrypted private keys (PBKDF2 + AES-256-GCM)
@@ -27,6 +27,8 @@ This document outlines development priorities for Paperwall, organized by timeli
 - Settings tab, about section, history tab, stats tab
 - Import/export private keys
 - Chrome Web Store published ([install here](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako))
+- Firefox and Firefox for Android support (published on Firefox Add-ons)
+- Microsoft Edge support (install from Chrome Web Store)
 
 ✅ **Payment Flow**
 
@@ -58,7 +60,6 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 ### Current Limitations
 
-⚠️ **Chrome only** - No Firefox, Safari, or Edge support yet
 ⚠️ **SKALE testnet only** - Use test funds, not real money
 ⚠️ **USDC only** - No support for ETH or other tokens
 ⚠️ **Fixed pricing** - No dynamic pricing or time-based access
@@ -98,10 +99,11 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 - **Base (Coinbase L2)** - Alternative to SKALE
 
-### 3. Multi-Browser Support
+### 3. Multi-Browser Support ✅
 
-- **Edge support** (Chromium-based, low effort)
-- **Firefox extension** (Manifest V3)
+- **Edge support** ✅ (Chromium-based, available on Chrome Web Store)
+- **Firefox extension** ✅ (Manifest V3, available on Firefox Add-ons)
+- **Firefox for Android** ✅ (version 142+)
 
 ---
 
@@ -181,7 +183,8 @@ These are ideas we're exploring but haven't committed to.
 
 ### Mobile Support
 
-- **Mobile browser extensions** - iOS Safari, Android Chrome
+- **Firefox for Android** ✅ - Supported (version 142+)
+- **Mobile browser extensions** - iOS Safari, Android Chrome (under consideration)
 - **Progressive Web App (PWA)** - Wallet as standalone app
 - **Deep linking** - Open articles in-app
 

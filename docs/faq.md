@@ -66,7 +66,9 @@ For $0.01 payments, Tier 1 is sufficient. For high-value content ($1+), wait for
 
 ### Can readers pay from their phone?
 
-**Not yet.** Paperwall currently requires a desktop Chrome browser with the extension installed. Mobile support (iOS Safari, Android Chrome) is planned for Phase 2 (Q3-Q4 2026).
+**Firefox for Android (version 142+) is supported.** Readers can install the Paperwall extension through Firefox on their Android device.
+
+iOS Safari and Android Chrome are not yet supported.
 
 ### What if the facilitator service goes down?
 
@@ -277,7 +279,7 @@ Load the extension:
 1. Open `chrome://extensions`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select `packages/extension/dist`
+4. Select `packages/extension/dist-chrome`
 
 Serve the demo site:
 ```bash

@@ -219,7 +219,7 @@ npm run build --workspace=packages/agent
 2. Open `chrome://extensions` in Chrome
 3. Enable "Developer mode" (toggle in top-right)
 4. Click "Load unpacked"
-5. Select the `packages/extension/dist` directory
+5. Select the `packages/extension/dist-chrome` directory
 6. The extension appears in your toolbar
 
 After making changes, rebuild and click the "Reload" button on `chrome://extensions`.

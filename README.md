@@ -191,7 +191,9 @@ See the full **[publisher guide](docs/publisher-guide.md)** for configuration de
 
 ### For readers
 
-1. Install the [Paperwall extension](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako) from the Chrome Web Store (see [user guide](docs/user-guide.md))
+1. Install the Paperwall extension (see [user guide](docs/user-guide.md)):
+   - **Chrome / Edge:** [Chrome Web Store](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako)
+   - **Firefox / Firefox for Android:** [Firefox Add-ons page]
 2. Create a wallet with a strong password
 3. Fund your wallet with SKALE testnet USDC
 4. Visit a Paperwall-enabled site and click "Pay" when prompted
@@ -210,7 +212,7 @@ Load the extension in Chrome for development:
 
 1. Open `chrome://extensions`
 2. Enable "Developer mode"
-3. Click "Load unpacked" and select `packages/extension/dist`
+3. Click "Load unpacked" and select `packages/extension/dist-chrome`
 
 ### Try the demo
 
@@ -232,7 +234,7 @@ See **[demo/README.md](demo/README.md)** for detailed instructions including tes
 paperwall/
   packages/
     sdk/          Publisher SDK (~5 KB IIFE bundle, zero runtime dependencies)
-    extension/    Chrome extension (MV3, TypeScript)
+    extension/    Browser extension (Chrome, Firefox, Edge · MV3, TypeScript)
     agent/        CLI tool + A2A server for programmatic/agent access
   demo/           Demo news site with Paperwall integration
   test/           Cross-package integration tests
@@ -259,7 +261,6 @@ paperwall/
 
 **We’re still in the early stages. Here’s what you need to know:**
 
-- **Chrome only** -- Firefox and other browsers are not supported yet
 - **USDC only** -- no support for ETH or other tokens
 - **SKALE network only** -- other L2s are not yet supported
 - **Testnet phase** -- use test funds, not real money

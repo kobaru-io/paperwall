@@ -75,11 +75,34 @@ const activePages = new Map<number, ActivePageState>();
 // Track in-progress payments per tab to prevent concurrent payments
 const paymentsInProgress = new Set<number>();
 
+// Mutex to prevent TOCTOU race on brute-force counter reads/writes
+let unlockInProgress = false;
+
 // Brute-force protection for wallet unlock
 const MAX_UNLOCK_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60_000 * 5; // 5 minutes
-let unlockAttempts = 0;
-let lockedUntil = 0;
+
+// State persisted in chrome.storage.session so it survives SW/event-page restarts
+// (critical on Firefox Android where the OS can kill the event page at any time).
+
+interface BruteForceState {
+  unlockAttempts: number;
+  lockedUntil: number;
+}
+
+async function getBruteForceState(): Promise<BruteForceState> {
+  const data = await chrome.storage.session.get(['unlockAttempts', 'lockedUntil']);
+  const rawAttempts = data['unlockAttempts'];
+  const rawLocked = data['lockedUntil'];
+  return {
+    unlockAttempts: typeof rawAttempts === 'number' ? rawAttempts : 0,
+    lockedUntil: typeof rawLocked === 'number' ? rawLocked : 0,
+  };
+}
+
+async function setBruteForceState(state: BruteForceState): Promise<void> {
+  await chrome.storage.session.set(state);
+}
 
 // ── Wallet Handlers ─────────────────────────────────────────────────
 
@@ -134,50 +157,61 @@ async function handleGetWalletState(): Promise<MessageResponse> {
 async function handleUnlockWallet(
   password: string,
 ): Promise<MessageResponse> {
-  // Check if temporarily locked due to too many attempts
-  if (Date.now() < lockedUntil) {
-    const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
-    return { success: false, error: `Too many attempts. Try again in ${remaining}s` };
+  if (unlockInProgress) {
+    return { success: false, error: 'Another unlock attempt is in progress. Please wait.' };
   }
-
-  const localData = await chrome.storage.local.get('wallet');
-  const wallet = localData['wallet'] as WalletData | undefined;
-
-  if (!wallet) {
-    return { success: false, error: 'No wallet found' };
-  }
-
+  unlockInProgress = true;
   try {
-    const privateKey = await decryptKey(
-      password,
-      wallet.encryptedKey,
-      wallet.keySalt,
-      wallet.keyIv,
-    );
-    await chrome.storage.session.set({ privateKey });
-
-    // Reset attempts on successful unlock
-    unlockAttempts = 0;
-    lockedUntil = 0;
-
-    return { success: true };
-  } catch {
-    // Increment failed attempts
-    unlockAttempts++;
-    if (unlockAttempts >= MAX_UNLOCK_ATTEMPTS) {
-      lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-      unlockAttempts = 0;
-      return {
-        success: false,
-        error: `Too many incorrect attempts. Wallet locked for 5 minutes.`,
-      };
+    // Check if temporarily locked due to too many attempts
+    const bfState = await getBruteForceState();
+    if (Date.now() < bfState.lockedUntil) {
+      const remaining = Math.ceil((bfState.lockedUntil - Date.now()) / 1000);
+      return { success: false, error: `Too many attempts. Try again in ${remaining}s` };
     }
 
-    const attemptsLeft = MAX_UNLOCK_ATTEMPTS - unlockAttempts;
-    return {
-      success: false,
-      error: `Incorrect password. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`,
-    };
+    const localData = await chrome.storage.local.get('wallet');
+    const wallet = localData['wallet'] as WalletData | undefined;
+
+    if (!wallet) {
+      return { success: false, error: 'No wallet found' };
+    }
+
+    try {
+      const privateKey = await decryptKey(
+        password,
+        wallet.encryptedKey,
+        wallet.keySalt,
+        wallet.keyIv,
+      );
+      await chrome.storage.session.set({ privateKey });
+
+      // Reset attempts on successful unlock
+      await setBruteForceState({ unlockAttempts: 0, lockedUntil: 0 });
+
+      return { success: true };
+    } catch {
+      // Increment failed attempts
+      const newAttempts = bfState.unlockAttempts + 1;
+      if (newAttempts >= MAX_UNLOCK_ATTEMPTS) {
+        await setBruteForceState({
+          lockedUntil: Date.now() + LOCKOUT_DURATION_MS,
+          unlockAttempts: 0,
+        });
+        return {
+          success: false,
+          error: `Too many incorrect attempts. Wallet locked for 5 minutes.`,
+        };
+      }
+
+      await setBruteForceState({ unlockAttempts: newAttempts, lockedUntil: bfState.lockedUntil });
+      const attemptsLeft = MAX_UNLOCK_ATTEMPTS - newAttempts;
+      return {
+        success: false,
+        error: `Incorrect password. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`,
+      };
+    }
+  } finally {
+    unlockInProgress = false;
   }
 }
 
@@ -266,8 +300,7 @@ async function handlePageHasPaperwall(
         const canAfford = BigInt(balance.raw) >= BigInt(state.price);
         if (!canAfford) {
           // Amber badge: detected but insufficient balance
-          chrome.action.setBadgeText({ tabId, text: '$' });
-          chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.amber });
+          setBadge(tabId, '$', BADGE_COLORS.amber);
           return { success: true };
         }
       } catch {
@@ -277,8 +310,7 @@ async function handlePageHasPaperwall(
   }
 
   // Default: purple badge (can afford or unknown)
-  chrome.action.setBadgeText({ tabId, text: '$' });
-  chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.detected });
+  setBadge(tabId, '$', BADGE_COLORS.detected);
 
   return { success: true };
 }
@@ -467,8 +499,7 @@ async function handleSignAndPay(
       } catch { /* tab may be closed */ }
 
       // 8b. Set badge to pending
-      chrome.action.setBadgeText({ tabId, text: '⏳' });
-      chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.detected });
+      setBadge(tabId, '⏳', BADGE_COLORS.detected);
 
       // 8c. Write pending history record
       await addPayment({
@@ -541,8 +572,7 @@ async function handleSignAndPay(
     });
 
     // 10. Update badge to green
-    chrome.action.setBadgeText({ tabId, text: '\u2713' });
-    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.success });
+    setBadge(tabId, '\u2713', BADGE_COLORS.success);
 
     const result = {
       success: true,
@@ -643,8 +673,7 @@ async function settleInBackground(
     } catch { /* tab may be closed */ }
 
     // Badge: success
-    chrome.action.setBadgeText({ tabId, text: '\u2713' });
-    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.success });
+    setBadge(tabId, '\u2713', BADGE_COLORS.success);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Settlement failed';
     console.error(`[paperwall ${ts()}] Settlement failed:`, { requestId, error: errorMessage });
@@ -727,46 +756,69 @@ async function handleGetHistory(
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+function setBadge(tabId: number, text: string, color: string): void {
+  try {
+    chrome.action.setBadgeText({ tabId, text });
+  } catch (err) {
+    console.warn('Badge API unavailable (text):', err);
+  }
+  try {
+    chrome.action.setBadgeBackgroundColor({ tabId, color });
+  } catch (err) {
+    console.warn('Badge API unavailable (color):', err);
+  }
+}
+
 function setBadgeError(tabId: number): void {
-  chrome.action.setBadgeText({ tabId, text: '!' });
-  chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS.error });
+  setBadge(tabId, '!', BADGE_COLORS.error);
 }
 
 // Formatting functions moved to shared/format.ts
 
 async function handleExportPrivateKey(password: string): Promise<MessageResponse> {
-  // Share brute-force lockout with unlock handler
-  if (Date.now() < lockedUntil) {
-    const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
-    return { success: false, error: `Too many attempts. Try again in ${remaining}s` };
+  if (unlockInProgress) {
+    return { success: false, error: 'Another unlock attempt is in progress. Please wait.' };
   }
-
-  const data = await chrome.storage.local.get('wallet');
-  const wallet = data['wallet'] as WalletData | undefined;
-
-  if (!wallet) {
-    return { success: false, error: 'No wallet found' };
-  }
-
+  unlockInProgress = true;
   try {
-    const privateKey = await decryptKey(
-      password,
-      wallet.encryptedKey,
-      wallet.keySalt,
-      wallet.keyIv,
-    );
-    unlockAttempts = 0;
-    lockedUntil = 0;
-    return { success: true, privateKey };
-  } catch {
-    unlockAttempts++;
-    if (unlockAttempts >= MAX_UNLOCK_ATTEMPTS) {
-      lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-      unlockAttempts = 0;
-      return { success: false, error: 'Too many incorrect attempts. Wallet locked for 5 minutes.' };
+    // Share brute-force lockout with unlock handler
+    const bfState = await getBruteForceState();
+    if (Date.now() < bfState.lockedUntil) {
+      const remaining = Math.ceil((bfState.lockedUntil - Date.now()) / 1000);
+      return { success: false, error: `Too many attempts. Try again in ${remaining}s` };
     }
-    const attemptsLeft = MAX_UNLOCK_ATTEMPTS - unlockAttempts;
-    return { success: false, error: `Wrong password. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.` };
+
+    const data = await chrome.storage.local.get('wallet');
+    const wallet = data['wallet'] as WalletData | undefined;
+
+    if (!wallet) {
+      return { success: false, error: 'No wallet found' };
+    }
+
+    try {
+      const privateKey = await decryptKey(
+        password,
+        wallet.encryptedKey,
+        wallet.keySalt,
+        wallet.keyIv,
+      );
+      await setBruteForceState({ unlockAttempts: 0, lockedUntil: 0 });
+      return { success: true, privateKey };
+    } catch {
+      const newAttempts = bfState.unlockAttempts + 1;
+      if (newAttempts >= MAX_UNLOCK_ATTEMPTS) {
+        await setBruteForceState({
+          lockedUntil: Date.now() + LOCKOUT_DURATION_MS,
+          unlockAttempts: 0,
+        });
+        return { success: false, error: 'Too many incorrect attempts. Wallet locked for 5 minutes.' };
+      }
+      await setBruteForceState({ unlockAttempts: newAttempts, lockedUntil: bfState.lockedUntil });
+      const attemptsLeft = MAX_UNLOCK_ATTEMPTS - newAttempts;
+      return { success: false, error: `Wrong password. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.` };
+    }
+  } finally {
+    unlockInProgress = false;
   }
 }
 
@@ -904,10 +956,9 @@ export function handleMessage(
 }
 
 /** @internal Reset brute-force counter state. Use only in tests. */
-export function _resetBruteForceStateForTest(): void {
+export async function _resetBruteForceStateForTest(): Promise<void> {
   if (process.env.NODE_ENV !== 'test') return;
-  unlockAttempts = 0;
-  lockedUntil = 0;
+  await setBruteForceState({ unlockAttempts: 0, lockedUntil: 0 });
 }
 
 /** @internal Reset per-tab module state. Use only in tests. */

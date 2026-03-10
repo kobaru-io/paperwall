@@ -7,6 +7,8 @@
   "type": "module",
   "scripts": {
     "build": "tsx build.ts",
+    "pack": "bash scripts/pack.sh",
+    "lint:firefox": "web-ext lint --source-dir dist-firefox/",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -17,7 +19,8 @@
     "tsx": "^4.0.0",
     "typescript": "^5.9.3",
     "viem": "^2.43.5",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "web-ext": "^8.4.0"
   },
   "dependencies": {
     "@x402/evm": "^2.3.1",

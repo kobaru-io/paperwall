@@ -47,6 +47,8 @@ packages/*/CLAUDE.md
 # -- Pre-dev research --
 docs/pre-dev/
 docs/codereview/
+docs/ring*
+docs/ring:dev-cycle
 # -- Release archives --
 packages/extension/releases/
 
@@ -54,6 +56,9 @@ packages/extension/releases/
 packages/extension/*.zip
 packages/extension/*.crx
 packages/extension/*.xpi
+
+# -- Chrome extension build artifact --
+packages/extension/dist-chrome/
 
 # -- Firefox extension build artifact --
 packages/extension/dist-firefox/

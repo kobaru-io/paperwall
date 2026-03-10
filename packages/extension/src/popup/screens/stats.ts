@@ -189,7 +189,7 @@ function renderPeriodSection(
   const daily = groupByDay(filtered, days);
   const svgEl = document.createElement('div');
   svgEl.className = 'stats-sparkline';
-  svgEl.innerHTML = buildSparklineSvg(daily, 300, 40);
+  svgEl.appendChild(buildSparklineSvg(daily, 300, 40));
 
   section.append(total, svgEl);
 }
@@ -250,14 +250,22 @@ function renderMonthlyChart(section: HTMLElement, records: readonly PaymentRecor
   const monthly = groupByMonth(records, 6);
   const svgEl = document.createElement('div');
   svgEl.className = 'stats-bar-chart';
-  svgEl.innerHTML = buildBarChartSvg(monthly, 300, 60);
+  svgEl.appendChild(buildBarChartSvg(monthly, 300, 60));
   section.appendChild(svgEl);
 }
 
 // ── SVG Generators ────────────────────────────────────────────────
 
-function buildSparklineSvg(points: readonly DailySpend[], width: number, height: number): string {
-  if (points.length === 0) return `<svg width="${width}" height="${height}"></svg>`;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function buildSparklineSvg(points: readonly DailySpend[], width: number, height: number): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('aria-hidden', 'true');
+
+  if (points.length === 0) return svg;
 
   // Scale down by 1000 before Number() to stay within MAX_SAFE_INTEGER for large aggregates
   const values = points.map((p) => Number(p.totalMicro / 1000n));
@@ -268,13 +276,25 @@ function buildSparklineSvg(points: readonly DailySpend[], width: number, height:
     .map((v, i) => `${(i * step).toFixed(1)},${(height - (v / max) * (height - 4) - 2).toFixed(1)}`)
     .join(' ');
 
-  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true">
-    <polyline points="${coords}" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linejoin="round"/>
-  </svg>`;
+  const polyline = document.createElementNS(SVG_NS, 'polyline');
+  polyline.setAttribute('points', coords);
+  polyline.setAttribute('fill', 'none');
+  polyline.setAttribute('stroke', 'var(--color-primary)');
+  polyline.setAttribute('stroke-width', '2');
+  polyline.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(polyline);
+
+  return svg;
 }
 
-function buildBarChartSvg(bars: readonly MonthlySpend[], width: number, height: number): string {
-  if (bars.length === 0) return `<svg width="${width}" height="${height}"></svg>`;
+function buildBarChartSvg(bars: readonly MonthlySpend[], width: number, height: number): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('aria-hidden', 'true');
+
+  if (bars.length === 0) return svg;
 
   // Scale down by 1000 before Number() to stay within MAX_SAFE_INTEGER for large aggregates
   const values = bars.map((b) => Number(b.totalMicro / 1000n));
@@ -284,14 +304,31 @@ function buildBarChartSvg(bars: readonly MonthlySpend[], width: number, height: 
   const labelHeight = 14;
   const chartHeight = height - labelHeight;
 
-  const rects = bars.map((bar, i) => {
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i]!;
     const barH = Math.max((Number(bar.totalMicro / 1000n) / max) * chartHeight, bar.totalMicro > 0n ? 2 : 0);
     const x = i * (barWidth + gap);
     const y = chartHeight - barH;
     const label = bar.month.slice(5); // 'MM'
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--color-primary)" rx="2"/>
-    <text x="${(x + barWidth / 2).toFixed(1)}" y="${height}" text-anchor="middle" font-size="10" fill="var(--color-text-secondary)">${label}</text>`;
-  }).join('');
 
-  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true">${rects}</svg>`;
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', x.toFixed(1));
+    rect.setAttribute('y', y.toFixed(1));
+    rect.setAttribute('width', barWidth.toFixed(1));
+    rect.setAttribute('height', barH.toFixed(1));
+    rect.setAttribute('fill', 'var(--color-primary)');
+    rect.setAttribute('rx', '2');
+    svg.appendChild(rect);
+
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('x', (x + barWidth / 2).toFixed(1));
+    text.setAttribute('y', String(height));
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('font-size', '10');
+    text.setAttribute('fill', 'var(--color-text-secondary)');
+    text.textContent = label;
+    svg.appendChild(text);
+  }
+
+  return svg;
 }
