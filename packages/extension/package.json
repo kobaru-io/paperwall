@@ -1,6 +1,6 @@
 {
   "name": "@paperwall/extension",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Paperwall browser extension - micropayment wallet for the web",
   "license": "GPL-3.0",

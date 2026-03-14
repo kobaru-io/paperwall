@@ -558,6 +558,51 @@ The service worker is single-threaded but uses `await`, so interleaving is possi
 
 The extension never sends an optimistic payment signal to a publisher on the user's first visit. Optimistic flow tells the publisher "content will be unlocked" — but if the user then rejects the prompt, the publisher must awkwardly re-gate content that was already shown. For trusted sites, optimistic flow is safe because auto-pay will proceed (within budget). For unknown sites, the prompt must come first.
 
+### Why HTTPS-Only and Origin Validation
+
+Auto-pay makes payments **without user confirmation**, which changes the threat model. A manual "click approve" prompt gives the user a chance to spot a suspicious site. Auto-pay removes that checkpoint, so the extension must compensate with automated security checks.
+
+**The core threat: spoofing.** An attacker could create a fake version of a trusted publisher site and trick the user's extension into auto-paying. Three attack vectors were identified:
+
+1. **HTTP man-in-the-middle** — An attacker on the same network intercepts an HTTP page and injects or modifies the payment meta tag, redirecting micropayments to an attacker-controlled address. The user sees the legitimate publisher's content while paying the attacker.
+2. **Localhost/private IP** — A locally-served phishing page at `http://localhost:3000` or `http://192.168.1.1` presents a fake publisher UI and triggers auto-payments.
+3. **Exotic URI schemes** — `file://`, `data:`, and `blob:` URIs can render arbitrary HTML with payment signals, bypassing external security scanning.
+
+**The decision: defense in depth across three layers.**
+
+The extension validates payment origins at three independent points. A bypass at any single layer does not compromise the system:
+
+| Layer | Location | What it checks |
+|-------|----------|---------------|
+| Content script | `content/index.ts` | `window.location.protocol === 'https:'` — non-HTTPS pages never trigger detection |
+| Bridge | `content/bridge.ts` | Rejects `file:`, `data:`, `blob:`, `javascript:` schemes |
+| Service worker | `message-router.ts` | Cross-verifies message origin against browser-verified `sender.tab.url` |
+| Decision engine | `auto-pay-rules.ts` | `validatePaymentOrigin()` blocks non-HTTPS, private IPs, malformed URLs |
+
+**Why full block on HTTP, not just disable auto-pay:** We considered allowing manual payment prompts on HTTP sites while only blocking auto-pay. We rejected this because no legitimate publisher serves over HTTP in 2026, and showing a payment prompt on an HTTP page normalizes an unsafe interaction pattern. If a user sees "Pay $0.05 to example.com" on an HTTP page, they may click approve without realizing the page is spoofed.
+
+**Why cross-verify against `sender.tab.url`:** Content scripts run in the page context and their data could theoretically be manipulated. The `sender.tab.url` property is populated by the browser runtime itself and cannot be spoofed by the content script. By comparing the message's `origin` field against `new URL(sender.tab.url).origin`, the service worker independently confirms the payment request comes from the claimed site.
+
+**Why reuse the facilitator's private IP detection:** The `isPrivateIP()` function was already battle-tested in `facilitator.ts` to prevent SSRF attacks against the facilitator URL. Rather than writing a second implementation, we extracted it to `shared/origin-security.ts` and applied the same checks to page origins. This covers localhost, 127.0.0.0/8, RFC 1918 ranges, link-local, IPv6 loopback, and IPv4-mapped IPv6 addresses.
+
+### Why Rate Limiting in the Decision Engine
+
+Budget limits cap **total spending** but don't prevent **rapid individual payments**. A malicious page could fire payment signals in a tight loop, making dozens of $0.001 payments per second within the daily budget. Each payment is individually small, but the rapid pace prevents the user from noticing or reacting.
+
+The rate limiter caps auto-pay at **5 attempts per origin per 60-second window**. It runs as Step 1 in the decision chain (after origin validation, before denylist). It's in-memory (resets on service worker restart) because budget limits are the durable safety net — the rate limiter is burst protection, not a spending cap.
+
+**Why 5 per minute:** Normal reading pace produces 1-3 page loads per minute. 5 gives headroom for fast browsing and tabbed reading while catching automated abuse (which would attempt hundreds per minute).
+
+**Why not only rate limit auto-pay successes:** The rate limiter counts all requests, including those that would be blocked downstream (e.g., denylisted sites). This is intentional — a malicious page has no way to avoid incrementing the counter, and the 60-second window is short enough that legitimate use is unaffected.
+
+### Why EIP-55 Address Validation
+
+The `payTo` address in the payment signal comes from the publisher's meta tag — it's publisher-controlled input that enters the extension unsanitized. A typo or manipulation in the address could send funds to the wrong destination. EIP-55 checksum validation (via `viem/getAddress`) catches malformed addresses before signing.
+
+### Why Normalize Origins Before Matching
+
+Origins from `window.location.origin` are already normalized by the browser (lowercase scheme + host, no trailing slash). However, origins could enter the system through other paths (popup UI, future API). Normalizing all origins (lowercase + strip trailing slash) before storage lookups ensures consistent matching regardless of how the origin was provided. Without this, a user could trust `https://example.com` but the extension could fail to match `https://Example.Com` — a silent budget-tracking bypass.
+
 ### What We Explicitly Deferred
 
 - **Auto-trust new sites up to a limit** — effectively makes every site auto-approved; too risky for v1
@@ -565,6 +610,9 @@ The extension never sends an optimistic payment signal to a publisher on the use
 - **Time-based trust decay** (auto-remove sites after 90 days inactive) — nice-to-have for v2
 - **Attention-weighted allocation** (Brave/Flattr model) — Paperwall uses explicit per-article pricing
 - **Export/import budget configuration** — deferred to v2
+- **Homoglyph/punycode detection** — client-side detection of lookalike domains (e.g., `examp1e.com` vs `example.com`); can be added without architectural changes
+- **Community domain blocklist** — MetaMask-style shared blocklist of known malicious domains; requires external service
+- **Dev mode for localhost** — toggle in Settings > Advanced for publisher testing on localhost; developers can use HTTPS localhost with valid certs for now
 
 ---
 
