@@ -79,6 +79,7 @@ sequenceDiagram
 - **Ultra-low fees** -- SKALE and Base networks have low transaction costs
 - **True micropayments** -- charge as little as $0.001 per article
 - **No account signup** -- readers just install the extension and set a password
+- **Auto-pay with budget controls** -- trust sites for automatic payments within daily, monthly, and per-site spending limits
 - **Private key never leaves your device** -- wallet is encrypted locally (multiple modes: password, env-injected for containers, machine-bound for local)
 - **Open source** -- every line of code is auditable
 - **Works with AI agents** -- CLI tool and A2A server support agent-to-agent payments with structured receipts
@@ -206,10 +207,10 @@ See the full **[publisher guide](docs/publisher-guide.md)** for configuration de
 
 1. Install the Paperwall extension (see [user guide](docs/user-guide.md)):
    - **Chrome / Edge:** [Chrome Web Store](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako)
-   - **Firefox / Firefox for Android:** [Firefox Add-ons page]
-2. Create a wallet with a strong password
+   - **Firefox / Firefox for Android:** [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/paperwall-app/)
+2. Create a wallet with a strong password and set your spending limits
 3. Fund your wallet with USDC on any supported network (SKALE Testnet, Base Sepolia, SKALE Mainnet, or Base Mainnet)
-4. Visit a Paperwall-enabled site and click "Pay" when prompted — the extension selects the best network automatically
+4. Visit a Paperwall-enabled site and choose "Pay & Auto-approve" or "Pay once" — the extension selects the best network automatically
 
 ### For developers
 

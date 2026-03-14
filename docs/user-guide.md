@@ -18,7 +18,7 @@ Yes. Here is why:
 
 - **Your money stays on your computer.** Your wallet's secret key (like a password to your money) is stored only on your computer, encrypted with a password you choose. No one else -- not Paperwall, not the website you visit -- can access it.
 
-- **You approve every payment.** Paperwall never pays automatically. Every time a website asks for payment, you see the price and click "Approve" or "Reject." You are always in control.
+- **You control every payment.** Every time a website asks for payment, you see the price and choose what to do. You can pay once, set up auto-pay with budget limits, or reject. You are always in control.
 
 - **The amounts are tiny.** Most articles cost between one cent and ten cents. Even if something went wrong, you would lose very little.
 
@@ -55,7 +55,7 @@ Edge can install extensions from the Chrome Web Store. Visit the [Paperwall exte
 
 ### Firefox and Firefox for Android
 
-Install Paperwall from the [Firefox Add-ons page]. Firefox for Android (version 142+) is supported — install it the same way through Firefox on your Android device.
+Install Paperwall from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/paperwall-app/). Firefox for Android (version 142+) is supported — install it the same way through Firefox on your Android device.
 
 ### Pin the extension (recommended, Chrome and Edge)
 
@@ -87,9 +87,21 @@ Your password protects your money. Choose a strong password:
 3. Type your password in the **"Password"** field
 4. Type the same password again in the **"Confirm Password"** field
 5. Click the **"Create Wallet"** button
-6. Wait a moment -- the button will say "Creating..." while it works
+6. Wait a moment -- the button says "Creating..." while it works
 
-When it finishes, you will see your **dashboard** with:
+When it finishes, you will see the **spending limits setup** screen.
+
+### Set your spending limits
+
+After creating your wallet, Paperwall asks you to set spending limits for auto-pay. These limits protect you from overspending:
+
+- **Daily limit** -- the most you can spend across all sites in a single day (default: $2.00)
+- **Monthly limit** -- the most you can spend across all sites in a calendar month (default: $20.00)
+- **Per-site limit** -- the most any single site can charge you per month (default: $0.50)
+
+You can adjust these defaults now or change them later in the Budget tab. Click **"Save & Continue"** to finish setup.
+
+You will then see your **dashboard** with:
 
 - Your **balance** (it will show $0.00 since your wallet is new)
 - Your **wallet address** (a long string starting with `0x` -- this is like your account number)
@@ -134,10 +146,15 @@ A payment screen appears showing:
 - **Price** -- how much it costs (for example, `$0.01 USDC`)
 - **Network** -- the payment network (SKALE Testnet)
 
-### Decide: approve or reject
+### Choose how to pay
 
-- Click **"Approve Payment"** to pay and access the content. The button will say "Processing..." for a moment, then you will see "Payment successful" with a transaction confirmation.
-- Click **"Reject"** if you don't want to pay. You won't be charged anything.
+You have three options:
+
+- **"Pay & Auto-approve"** (primary button) -- Pay now and trust this site for future payments. The next time you visit this site, payments within your budget limits will be approved automatically without a prompt.
+- **"Pay once"** (secondary button) -- Pay this one time only. You will be prompted again on your next visit.
+- **"Reject"** -- Don't pay. You won't be charged. If you also click **"Block this site"**, Paperwall will never ask you about this site again (you can unblock it later in the Budget tab).
+
+If auto-pay is paused for a site you previously trusted (for example, because your daily budget ran out or the price increased), you will see an alert banner at the top of the payment prompt explaining why. You can still choose to pay manually.
 
 ### After payment
 
@@ -160,7 +177,7 @@ To see how much money is left in your wallet:
 
 ## Step 6: Navigate the popup tabs
 
-After you unlock your wallet, you see a tab bar at the top of the popup with four tabs: **Home**, **History**, **Stats**, and **Settings**. There is also a small **arrow button** in the top-right corner that opens the popup as a full browser tab for more screen space.
+After you unlock your wallet, you see a tab bar at the top of the popup with five tabs: **Home**, **History**, **Budget**, **Stats**, and **Settings**. There is also a small **arrow button** in the top-right corner that opens the popup as a full browser tab for more screen space.
 
 ### Home tab
 
@@ -181,6 +198,19 @@ The Stats tab shows your spending patterns over time.
 - At the top you see your **total spend** for the selected period, with a sparkline chart
 - Below that, your **top 5 sites** by spending amount
 - At the bottom, a **6-month bar chart** showing monthly spending trends
+
+### Budget tab
+
+The Budget tab lets you manage your auto-pay spending limits and control which sites can auto-pay.
+
+At the top, you see two **progress bars** showing how much of your daily and monthly budgets you have used. These update in real time as you make payments.
+
+Below the progress bars:
+
+- **Trusted sites** -- A list of sites you have auto-approved. Each site shows its per-site monthly budget and how much has been spent. Click a site to edit its budget or remove it from the trusted list.
+- **Blocked sites (denylist)** -- Sites you have blocked. Paperwall will never prompt you for payment on these sites. You can unblock a site by clicking the remove button next to it.
+
+You can also edit your global limits (daily, monthly, and default per-site budget) from this tab.
 
 ### Settings tab
 

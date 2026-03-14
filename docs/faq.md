@@ -66,7 +66,7 @@ For $0.01 payments, Tier 1 is sufficient. For high-value content ($1+), wait for
 
 ### Can readers pay from their phone?
 
-**Firefox for Android (version 142+) is supported.** Readers can install the Paperwall extension through Firefox on their Android device.
+**Firefox for Android (version 142+) is supported.** Readers can install the Paperwall extension from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/paperwall-app/) on their Android device.
 
 iOS Safari and Android Chrome are not yet supported.
 
@@ -146,7 +146,7 @@ Your private key is:
 - **Password-protected** (you choose the password)
 - **Cleared on browser close** (decrypted key in session storage only)
 
-You approve every payment manually. Paperwall never pays automatically.
+You approve every payment. If you enable auto-pay for a site, Paperwall approves payments automatically but only within your configured budget limits.
 
 If you forget your password, there's no recovery. Your funds are permanently inaccessible. **Write down your password.**
 
@@ -228,9 +228,7 @@ In fact, **that's the point** — pay a penny to remove ads instead of seeing th
 
 Click "Reject" instead of "Approve". You won't be charged.
 
-The Agent CLI already supports budget controls (per-request, daily, and total spending limits). Extension-side budget controls are planned for Phase 1:
-- "Never pay more than $0.10 per article"
-- "Max $5/day across all sites"
+Both the extension and the agent CLI support budget controls. In the extension, open the **Budget tab** to set per-site limits, daily caps, and monthly caps. See the [Auto-Pay FAQ](#for-readers-auto-pay) for details.
 
 ### Can I get a refund if I accidentally paid?
 
@@ -242,6 +240,42 @@ Be careful before approving. The extension shows:
 - Network being used (with TEST badge for testnet)
 
 If you're unsure, click "Reject."
+
+---
+
+## For readers: auto-pay
+
+### How does auto-pay work?
+
+When you visit a site with Paperwall, you can click **"Pay & Auto-approve"** instead of "Pay once." This adds the site to your trusted list. The next time that site requests a payment within your budget limits, Paperwall approves it automatically without showing a prompt.
+
+Auto-pay only works within your spending limits. If a payment would exceed any of your budgets, Paperwall pauses auto-pay and shows you a prompt instead.
+
+### How do I control spending limits?
+
+Open the **Budget tab** in the Paperwall popup. You can set three types of limits:
+
+- **Daily limit** -- the most you can spend across all sites in 24 hours (default: $2.00)
+- **Monthly limit** -- the most you can spend across all sites in a calendar month (default: $20.00)
+- **Per-site limit** -- the most any single site can charge you per month (default: $0.50)
+
+You can also edit the budget for individual trusted sites by clicking on them in the Budget tab.
+
+### Can I block specific sites?
+
+**Yes.** When a payment prompt appears, click **"Block this site"** and Paperwall will never ask you about that site again. You can also manage your blocked sites in the **Budget tab** under the denylist section, where you can unblock sites at any time.
+
+### What happens when my budget runs out?
+
+Paperwall pauses auto-pay for the rest of the budget period. You will still see a payment prompt with an alert banner explaining why auto-pay is paused (for example, "Daily budget exceeded"). You can choose to pay manually or wait until the budget resets.
+
+Daily budgets reset after 24 hours. Monthly budgets reset at the start of each calendar month (UTC).
+
+### Is auto-pay safe? What if a payment fails?
+
+**Yes, auto-pay is safe.** Your spending is always capped by your daily, monthly, and per-site limits. Paperwall checks all limits before every auto-payment.
+
+If a payment fails after the budget was charged, Paperwall automatically refunds the amount back to your budget. Your actual wallet balance is not affected by failed payments -- only successful on-chain transactions move real money.
 
 ---
 

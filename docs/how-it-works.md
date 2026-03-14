@@ -61,7 +61,7 @@ If multiple signals are present, the higher-priority one wins.
 
 ## Next steps
 
-- **Browser users:** Install the Chrome extension with the [user guide](user-guide.md)
+- **Browser users:** Install the browser extension with the [user guide](user-guide.md)
 - **AI agent users:** Set up Claude Code or Gemini CLI with the [AI agent setup guide](ai-agent-setup.md)
 - **CLI users:** Learn all commands in the [agent CLI guide](agent-cli-guide.md)
 - **Server operators:** Run the A2A server with the [A2A server guide](a2a-server-guide.md)

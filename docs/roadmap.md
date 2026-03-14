@@ -24,10 +24,12 @@ This document outlines development priorities for Paperwall, organized by timeli
 - USDC balance display (SKALE + Base)
 - EIP-712 payment signing
 - Payment history tracking (1000 record cap)
-- Settings tab, about section, history tab, stats tab
+- Settings tab, about section, history tab, stats tab, budget tab
 - Import/export private keys
+- Auto-pay with budget controls (daily, monthly, per-site limits)
+- Trusted site management and denylist
 - Chrome Web Store published ([install here](https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako))
-- Firefox and Firefox for Android support (published on Firefox Add-ons)
+- Firefox and Firefox for Android support ([install here](https://addons.mozilla.org/en-US/firefox/addon/paperwall-app/))
 - Microsoft Edge support (install from Chrome Web Store)
 
 ✅ **Multi-Network Support**
@@ -92,14 +94,9 @@ This document outlines development priorities for Paperwall, organized by timeli
 
 ## Next
 
-**Goal:** Enhanced browser extension capabilities
+**Goal:** Mainstream-ready platform with publisher tools and verification
 
-### 1. Auto-Approval Budgets
-
-- **Allow/deny lists** - Control which sites can auto-pay
-- **Per-site budgets** - "Auto-pay up to $1/month on example.com"
-- **Daily spending limits** - "Max $5/day across all sites"
-- **Total budget cap** - "Stop at $50 lifetime"
+Planning in progress — check back soon.
 
 ---
 

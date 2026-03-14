@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { handleMessage, _resetBruteForceStateForTest } from '../src/background/message-router.js';
+import { _resetRateLimiterForTest } from '../src/background/auto-pay-rules.js';
 import { createStorageMock } from './helpers/storage-mock.js';
 import fs from 'fs';
 import path from 'path';
@@ -54,6 +55,7 @@ beforeEach(async () => {
     `chrome-extension://test-extension-id/${p}`
   );
   await _resetBruteForceStateForTest();
+  _resetRateLimiterForTest();
 });
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -124,7 +126,7 @@ describe('Firefox Android Compatibility', () => {
             accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '100000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x0000000000000000000000000000000000000001' }],
           },
         },
-        { tab: { id: 1 } } as Partial<chrome.runtime.MessageSender>,
+        { tab: { id: 1, url: 'https://example.com/article' } } as Partial<chrome.runtime.MessageSender>,
       );
 
       expect(response.success).toBe(true);
@@ -166,7 +168,7 @@ describe('Firefox Android Compatibility', () => {
             accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '100000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x0000000000000000000000000000000000000001' }],
           },
         },
-        { tab: { id: 2 } } as Partial<chrome.runtime.MessageSender>,
+        { tab: { id: 2, url: 'https://example.com/article' } } as Partial<chrome.runtime.MessageSender>,
       );
 
       expect(response.success).toBe(true);
@@ -211,7 +213,7 @@ describe('Firefox Android Compatibility', () => {
             accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '100000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x0000000000000000000000000000000000000001' }],
           },
         },
-        { tab: { id: 3 } } as Partial<chrome.runtime.MessageSender>,
+        { tab: { id: 3, url: 'https://example.com/article' } } as Partial<chrome.runtime.MessageSender>,
       );
 
       // Handler still succeeds (badge failure is non-fatal)

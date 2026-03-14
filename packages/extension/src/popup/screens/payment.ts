@@ -1,6 +1,6 @@
 // ── Payment Prompt Screen ────────────────────────────────────────
-// Displayed when the user is on a Paperwall page and clicks "Pay".
-// Shows site info, price, and approve/reject buttons.
+// Displays 3-option payment prompt: Pay & Auto-approve, Pay once, Reject/Block.
+// Context-aware variants for budget-exceeded and price-increased cases.
 
 import { formatUsdcFromString } from '../../shared/format.js';
 import { getNetwork, isTestnet } from '../../shared/constants.js';
@@ -10,6 +10,7 @@ interface PageState {
   price: string;
   network: string;
   facilitatorUrl: string;
+  autoPayReason?: string;
 }
 
 export function renderPaymentPrompt(
@@ -28,7 +29,24 @@ export function renderPaymentPrompt(
   description.className = 'screen-description';
   description.textContent = 'This site uses Paperwall for ad-free browsing.';
 
-  // Site Info
+  // ── Context Alert Banner ─────────────────────────────────────
+  const reason = pageState.autoPayReason ?? '';
+  const isBudgetExceeded = reason.includes('budget');
+  const isPriceIncreased = reason.includes('max amount');
+
+  let alertBanner: HTMLElement | null = null;
+  if (isBudgetExceeded || isPriceIncreased) {
+    alertBanner = document.createElement('div');
+    alertBanner.className = 'payment-alert';
+    alertBanner.setAttribute('role', 'alert');
+    if (isBudgetExceeded) {
+      alertBanner.textContent = 'Auto-pay paused: spending limit reached for this period.';
+    } else {
+      alertBanner.textContent = 'Auto-pay paused: price exceeds your approved amount.';
+    }
+  }
+
+  // ── Site Info ────────────────────────────────────────────────
   const siteSection = document.createElement('section');
   siteSection.className = 'payment-site-section';
   siteSection.setAttribute('aria-label', 'Payment details');
@@ -61,41 +79,85 @@ export function renderPaymentPrompt(
     networkVia.appendChild(testBadge);
   }
 
-  siteSection.append(
-    originLabel,
-    originValue,
-    priceLabel,
-    priceValue,
-    networkVia,
-  );
+  siteSection.append(originLabel, originValue, priceLabel, priceValue, networkVia);
 
-  // Status display
+  // ── Status Display ───────────────────────────────────────────
   const statusDisplay = document.createElement('p');
   statusDisplay.className = 'payment-status';
   statusDisplay.setAttribute('role', 'status');
   statusDisplay.setAttribute('aria-live', 'polite');
 
-  // Buttons
-  const buttonRow = document.createElement('div');
-  buttonRow.className = 'payment-buttons';
+  // ── Buttons (vertical stack) ─────────────────────────────────
+  const buttonStack = document.createElement('div');
+  buttonStack.className = 'payment-buttons-stack';
 
-  const approveButton = document.createElement('button');
-  approveButton.type = 'button';
-  approveButton.textContent = 'Approve Payment';
-  approveButton.className = 'btn btn-primary';
+  // Primary: Pay & Auto-approve (or context variant)
+  const autoApproveButton = document.createElement('button');
+  autoApproveButton.type = 'button';
+  autoApproveButton.className = 'btn btn-primary';
+  if (isPriceIncreased) {
+    autoApproveButton.textContent = `Pay $${formatUsdcFromString(pageState.price)} & Update Limit`;
+  } else if (isBudgetExceeded) {
+    autoApproveButton.textContent = `Pay $${formatUsdcFromString(pageState.price)} & Increase Budget`;
+  } else {
+    autoApproveButton.textContent = `Pay $${formatUsdcFromString(pageState.price)} & Auto-approve`;
+  }
 
-  const rejectButton = document.createElement('button');
-  rejectButton.type = 'button';
-  rejectButton.textContent = 'Reject';
-  rejectButton.className = 'btn btn-secondary';
+  // Secondary: Pay once
+  const payOnceButton = document.createElement('button');
+  payOnceButton.type = 'button';
+  payOnceButton.className = 'btn btn-secondary';
+  payOnceButton.textContent = `Pay $${formatUsdcFromString(pageState.price)} once`;
 
-  buttonRow.append(rejectButton, approveButton);
+  // Text links: Reject + Block this site
+  const linksRow = document.createElement('div');
+  linksRow.className = 'payment-links';
 
-  // Loading state
+  const rejectLink = document.createElement('button');
+  rejectLink.type = 'button';
+  rejectLink.className = 'btn-link';
+  rejectLink.textContent = 'Reject';
+
+  const blockLink = document.createElement('button');
+  blockLink.type = 'button';
+  blockLink.className = 'btn-link btn-link--danger';
+  blockLink.textContent = 'Block this site';
+
+  linksRow.append(rejectLink, blockLink);
+
+  buttonStack.append(autoApproveButton, payOnceButton, linksRow);
+
+  // ── Block Confirmation ───────────────────────────────────────
+  const blockConfirm = document.createElement('div');
+  blockConfirm.className = 'payment-block-confirm';
+  blockConfirm.style.display = 'none';
+
+  const blockMsg = document.createElement('p');
+  blockMsg.className = 'payment-block-msg';
+  blockMsg.textContent = `Block ${pageState.origin}? You won't see payment prompts for this site.`;
+
+  const blockYes = document.createElement('button');
+  blockYes.type = 'button';
+  blockYes.className = 'btn btn-danger btn-small';
+  blockYes.textContent = 'Yes, block';
+
+  const blockCancel = document.createElement('button');
+  blockCancel.type = 'button';
+  blockCancel.className = 'btn btn-secondary btn-small';
+  blockCancel.textContent = 'Cancel';
+
+  blockConfirm.append(blockMsg, blockYes, blockCancel);
+
+  // ── Loading / Status helpers ─────────────────────────────────
   function setLoading(loading: boolean): void {
-    approveButton.disabled = loading;
-    rejectButton.disabled = loading;
-    approveButton.textContent = loading ? 'Processing...' : 'Approve Payment';
+    autoApproveButton.disabled = loading;
+    payOnceButton.disabled = loading;
+    rejectLink.disabled = loading;
+    blockLink.disabled = loading;
+    if (loading) {
+      statusDisplay.textContent = 'Signing and sending payment...';
+      statusDisplay.className = 'payment-status';
+    }
   }
 
   function showStatus(message: string, isError: boolean): void {
@@ -105,21 +167,16 @@ export function renderPaymentPrompt(
       : 'payment-status payment-status--success';
   }
 
-  // Approve handler (guard against rapid double-click)
-  let approveInProgress = false;
-  async function handleApprove(): Promise<void> {
-    if (approveInProgress) return;
-    approveInProgress = true;
+  // ── Core payment handler ─────────────────────────────────────
+  let paymentInProgress = false;
+
+  async function handlePayment(autoApprove: boolean): Promise<void> {
+    if (paymentInProgress) return;
+    paymentInProgress = true;
     setLoading(true);
-    statusDisplay.textContent = 'Signing and sending payment...';
-    statusDisplay.className = 'payment-status';
 
     try {
-      // Get active tab to determine tabId
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabId = tab?.id ?? 0;
 
       const response = await chrome.runtime.sendMessage({
@@ -128,51 +185,136 @@ export function renderPaymentPrompt(
       });
 
       if (response.success) {
-        const txHash = (response.txHash as string) ?? '';
+        if (autoApprove) {
+          // Trust the site for future auto-pay
+          await chrome.runtime.sendMessage({
+            type: 'AUTO_PAY_TRUST_SITE',
+            origin: pageState.origin,
+            maxAmountRaw: pageState.price,
+          });
+
+          // Check if explainer needs to be shown
+          const rulesResponse = await chrome.runtime.sendMessage({ type: 'GET_AUTO_PAY_RULES' });
+          if (rulesResponse?.success) {
+            const rules = rulesResponse.rules as { explainerDismissed?: boolean } | undefined;
+            if (rules && !rules.explainerDismissed) {
+              showExplainerOverlay(container);
+            }
+          }
+        }
+
+        const txHash = (response.transaction as string) ?? '';
         const truncatedHash = txHash
           ? `${txHash.slice(0, 10)}...${txHash.slice(-6)}`
           : 'confirmed';
         showStatus(`Payment successful: ${truncatedHash}`, false);
 
-        // Transition back to dashboard after a short delay
         setTimeout(() => onComplete(), 2000);
       } else {
         const errorMsg = (response.error as string) || 'Payment failed.';
         showStatus(errorMsg, true);
 
-        // Show per-network balance breakdown on insufficient balance
         if (response.networkBalances && response.needed) {
           const balances = response.networkBalances as Record<string, { network: string; formatted: string }>;
           const needed = response.needed as string;
           showBalanceBreakdown(statusDisplay, balances, needed);
         }
 
+        paymentInProgress = false;
         setLoading(false);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       showStatus(message, true);
+      paymentInProgress = false;
       setLoading(false);
     }
   }
 
-  // Reject handler
-  function handleReject(): void {
+  // ── Event Listeners ──────────────────────────────────────────
+
+  autoApproveButton.addEventListener('click', () => handlePayment(true));
+  payOnceButton.addEventListener('click', () => handlePayment(false));
+
+  rejectLink.addEventListener('click', () => onComplete());
+
+  blockLink.addEventListener('click', () => {
+    blockConfirm.style.display = '';
+    buttonStack.style.display = 'none';
+  });
+
+  blockCancel.addEventListener('click', () => {
+    blockConfirm.style.display = 'none';
+    buttonStack.style.display = '';
+  });
+
+  blockYes.addEventListener('click', async () => {
+    blockYes.disabled = true;
+    blockCancel.disabled = true;
+    await chrome.runtime.sendMessage({
+      type: 'AUTO_PAY_ADD_DENYLIST',
+      origin: pageState.origin,
+    });
     onComplete();
+  });
+
+  // ── Assembly ─────────────────────────────────────────────────
+  container.append(heading, description);
+  if (alertBanner) container.appendChild(alertBanner);
+  container.append(siteSection, statusDisplay, buttonStack, blockConfirm);
+
+  autoApproveButton.focus();
+}
+
+// ── Explainer Overlay ─────────────────────────────────────────────
+
+function showExplainerOverlay(container: HTMLElement): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'explainer-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Auto-approve explainer');
+
+  const card = document.createElement('div');
+  card.className = 'explainer-card';
+
+  const title = document.createElement('h2');
+  title.className = 'explainer-title';
+  title.textContent = 'Auto-Approve Enabled';
+
+  const body = document.createElement('p');
+  body.className = 'explainer-body';
+  body.textContent =
+    'This site will be paid automatically on future visits, within your budget limits. ' +
+    'You can manage trusted sites and budgets in the Budget tab.';
+
+  const gotIt = document.createElement('button');
+  gotIt.type = 'button';
+  gotIt.className = 'btn btn-primary';
+  gotIt.textContent = 'Got it';
+
+  async function dismiss(): Promise<void> {
+    await chrome.runtime.sendMessage({ type: 'DISMISS_EXPLAINER' });
+    overlay.remove();
   }
 
-  approveButton.addEventListener('click', handleApprove);
-  rejectButton.addEventListener('click', handleReject);
+  gotIt.addEventListener('click', dismiss);
 
-  container.append(
-    heading,
-    description,
-    siteSection,
-    statusDisplay,
-    buttonRow,
-  );
+  // Escape key dismisses
+  function handleKeyDown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      dismiss();
+      document.removeEventListener('keydown', handleKeyDown);
+    }
+  }
+  document.addEventListener('keydown', handleKeyDown);
 
-  approveButton.focus();
+  card.append(title, body, gotIt);
+  overlay.appendChild(card);
+  container.appendChild(overlay);
+
+  // Focus trap: focus the button
+  gotIt.focus();
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -186,7 +328,7 @@ function formatNetworkName(caip2: string): string {
 }
 
 function showBalanceBreakdown(
-  container: HTMLElement,
+  statusEl: HTMLElement,
   balances: Record<string, { network: string; formatted: string }>,
   needed: string,
 ): void {
@@ -225,6 +367,5 @@ function showBalanceBreakdown(
     breakdown.appendChild(row);
   }
 
-  // Insert breakdown after the status message
-  container.insertAdjacentElement('afterend', breakdown);
+  statusEl.insertAdjacentElement('afterend', breakdown);
 }

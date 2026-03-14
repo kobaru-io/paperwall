@@ -14,6 +14,7 @@
   "footer": {
     "github": "GitHub",
     "chromeExtension": "Chrome Extension",
+    "firefoxExtension": "Firefox Extension",
     "npm": "npm Package",
     "builtBy": "Built by",
     "kobaru": "Kobaru",
@@ -25,7 +26,13 @@
     "tagline": "Pay Per Article. Not Per Month.",
     "subtitle": "Pay a penny to read an article. No subscriptions, no ads, no tracking. Free for readers, agents and publishers.",
     "ctaPrimary": "Get Started",
-    "ctaSecondary": "Try the Demo"
+    "ctaSecondary": "Try the Demo",
+    "ctaInstall": "Install Extension",
+    "ctaInstallChrome": "Install for Chrome",
+    "ctaInstallFirefox": "Install for Firefox",
+    "ctaAltFirefox": "Also available for Firefox",
+    "ctaAltChrome": "Also available for Chrome",
+    "ctaAvailableBoth": "Available for <chrome>Chrome</chrome> and <firefox>Firefox</firefox>"
   },
   "problem": {
     "title": "Why Paperwall?",
@@ -116,7 +123,7 @@
   "demo": {
     "title": "Try Paperwall",
     "subtitle": "This is a real paywalled article. It costs just $0.01 to read.",
-    "installPrompt": "You'll need the Paperwall Chrome extension to pay. It takes 30 seconds to set up.",
+    "installPrompt": "You'll need the Paperwall extension to pay. It takes 30 seconds to set up.",
     "installCta": "Install Extension",
     "backHome": "← Back to home",
     "articleTitle": "The Future of Micropayments",
@@ -197,7 +204,7 @@
     "backHome": "← Back to home",
     "lastUpdated": "Last updated: February 24, 2026",
     "overviewTitle": "1. Overview",
-    "overviewBody": "Paperwall is a free, open-source micropayment protocol for web content. It consists of a publisher SDK, a Chrome browser extension, and a CLI agent with an A2A (agent-to-agent) server. By using any Paperwall software, you agree to these terms.",
+    "overviewBody": "Paperwall is a free, open-source micropayment protocol for web content. It consists of a publisher SDK, a browser extension, and a CLI agent with an A2A (agent-to-agent) server. By using any Paperwall software, you agree to these terms.",
     "protocolTitle": "2. The Protocol",
     "protocolBody": "Paperwall is an open protocol licensed under GPL-3.0. Anyone can inspect, fork, modify, or self-host the software. There is no central authority controlling the protocol. Kobaru operates a reference implementation — including the facilitator service at gateway.kobaru.io — but you are free to run your own infrastructure.",
     "walletTitle": "3. Your Wallet",

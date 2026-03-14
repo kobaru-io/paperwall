@@ -22,7 +22,7 @@ Publishers add one script tag. Readers pay pennies. AI agents use a CLI.
 Add one line of code. Works with any website. No backend needed.
 
 ## For Readers
-Install the Chrome extension. Deposit $5. Read 500 articles.
+Install the browser extension. Deposit $5. Read 500 articles.
 
 ## For AI Agents
 Install the CLI: npm install -g @kobaru/paperwall

@@ -206,6 +206,16 @@ Routes all extension message types to their handlers:
 | `PAGE_HAS_PAPERWALL` | Content script | `handlePageHasPaperwall` | No |
 | `GET_PAGE_STATE` | Popup | `handleGetPageState` | No |
 | `SIGN_AND_PAY` | Popup | `handleSignAndPay` | Yes |
+| `GET_AUTO_PAY_RULES` | Popup | `handleGetAutoPayRules` | Yes |
+| `AUTO_PAY_TRUST_SITE` | Popup | `handleAutoPayTrustSite` | Yes |
+| `AUTO_PAY_REMOVE_SITE` | Popup | `handleAutoPayRemoveSite` | Yes |
+| `AUTO_PAY_UPDATE_SITE` | Popup | `handleAutoPayUpdateSite` | Yes |
+| `AUTO_PAY_UPDATE_GLOBALS` | Popup | `handleAutoPayUpdateGlobals` | Yes |
+| `AUTO_PAY_TOGGLE_PAUSE` | Popup | `handleAutoPayTogglePause` | Yes |
+| `AUTO_PAY_ADD_DENYLIST` | Popup | `handleAutoPayAddDenylist` | Yes |
+| `AUTO_PAY_REMOVE_DENYLIST` | Popup | `handleAutoPayRemoveDenylist` | Yes |
+| `AUTO_PAY_INIT_DEFAULTS` | Popup | `handleAutoPayInitDefaults` | Yes |
+| `DISMISS_EXPLAINER` | Popup | `handleDismissExplainer` | Yes |
 
 When `optimistic` is `true` (default for Tier 1 & 2), the `SIGN_AND_PAY` handler returns an optimistic response immediately after signing and dispatching settlement to the background. The page receives content access before on-chain confirmation. Background settlement then sends `PAYMENT_CONFIRMED` or `PAYMENT_SETTLE_FAILED` via the content script bridge.
 
@@ -244,6 +254,27 @@ Delegates EIP-712 signing to the `@x402/evm` library (`ExactEvmScheme` via `x402
 - Records include `status` (`"pending"` | `"confirmed"` | `"failed"`), `settledAt`, and `error` fields to track optimistic payment lifecycle.
 - `updatePaymentStatus()` updates a record's status after background settlement completes.
 
+**Auto-pay storage** (`auto-pay-storage.ts`):
+- Manages the `AutoPayRules` object in `chrome.storage.local`: trusted sites, per-site budgets, global daily/monthly limits, denylist, and onboarding state.
+- `checkAndDeduct(origin, amountRaw)` performs an atomic read-modify-write cycle: reads rules, applies lazy period resets, checks all budget limits (site, daily, monthly), deducts the amount, and writes back -- all in a single operation. This prevents race conditions when multiple payments are in flight.
+- `refundSpending(origin, amountRaw)` reverses the deduction if a payment fails after the budget was charged.
+- Lazy period resets: daily budgets reset after 24 hours of elapsed time, monthly budgets reset when the UTC calendar month changes. Resets happen during reads, not on timers.
+
+**Auto-pay rules engine** (`auto-pay-rules.ts`):
+- `checkAutoPayEligibility(origin, priceRaw)` evaluates an 11-step decision chain:
+  0. **Origin validation** -- If the origin fails HTTPS/scheme validation or targets a private IP, return `block`. Uses `validatePaymentOrigin()` from `shared/origin-security.ts`.
+  1. **Rate limiting** -- If the origin has exceeded 5 auto-payment attempts in the last 60 seconds, return `block`. In-memory tracking with auto-pruning.
+  2. **Denylist** -- If the origin is denylisted, return `block`.
+  3. **Wallet unlock** -- If the wallet is locked, return `skip`.
+  4. **Global enabled** -- If auto-pay is globally disabled, return `prompt`.
+  5. **Trusted site** -- If the site is not in the trusted list, return `prompt`.
+  6. **Price tier** -- If the price exceeds the site's `maxAmountRaw`, return `prompt-price-increased`.
+  7. **Site budget** -- If the site's monthly spending would exceed its budget, return `prompt-budget-exceeded`.
+  8. **Daily budget** -- If global daily spending would exceed the limit, return `prompt-budget-exceeded`.
+  9. **Monthly budget** -- If global monthly spending would exceed the limit, return `prompt-budget-exceeded`.
+  10. **All pass** -- Return `auto-pay`.
+- Context-aware prompts: when `prompt-budget-exceeded` or `prompt-price-increased` is returned, the popup payment screen shows an alert banner explaining why auto-pay is paused.
+
 ### Popup UI (`src/popup/`)
 
 The popup is a vanilla TypeScript application with no framework. It programmatically creates DOM elements.
@@ -257,9 +288,11 @@ The popup is a vanilla TypeScript application with no framework. It programmatic
 
 **Screens:**
 - **Setup** -- password input (12+ characters, 3-of-4 character categories), confirm, create wallet.
+- **Onboarding** -- first-run spending limits setup after wallet creation. Sets daily limit, monthly limit, and default per-site budget.
 - **Unlock** -- password input with brute-force counter display.
 - **Dashboard** -- balance with refresh, truncated address with copy, recent payments, current page status.
-- **Payment** -- site origin, price, network name, approve/reject buttons, processing state.
+- **Payment** -- site origin, price, network name, three-option prompt (Pay & Auto-approve, Pay once, Reject + Block this site), processing state. Shows alert banner when auto-pay is paused for a trusted site.
+- **Budget** -- third tab. Daily/monthly progress bars, trusted sites list with per-site budget editing, denylist management, global limit configuration.
 
 ### Message flow
 
@@ -787,6 +820,7 @@ Response (x402 `SettleResponse`):
 | Payment-in-progress lock | In-memory `Set<tabId>` | Service worker only, prevents concurrent payments |
 | Pending optimistic payments | `chrome.storage.session` | Service worker only, recovered on SW restart via `recoverPendingPayments()` |
 | Unlock attempt counter | In-memory variables | Service worker only, reset on restart |
+| Auto-pay rules | `chrome.storage.local` | Persistent, includes trusted sites, budgets, denylist |
 | Balance cache | In-memory `Map` | Service worker only, 30-second TTL |
 
 ---

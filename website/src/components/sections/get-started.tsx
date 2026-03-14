@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { motion, useReducedMotion } from 'motion/react';
+import { CHROME_STORE_URL } from '@/lib/constants';
 
 export default function GetStarted() {
   const t = useTranslations('getStarted');
@@ -98,7 +99,7 @@ export default function GetStarted() {
             </div>
             <div>
               <a
-                href="https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako"
+                href={CHROME_STORE_URL}
                 className="inline-flex items-center gap-2 border-2 border-[var(--border)]
                            bg-[var(--primary)] px-5 py-2.5 font-bold text-[var(--primary-foreground)]
                            shadow-[4px_4px_0_var(--border)] transition-all

@@ -28,6 +28,23 @@ export function formatUsdcFromString(smallestUnit: string): string {
 }
 
 /**
+ * Converts a dollar string (e.g. "2.50") to raw USDC units (6 decimals).
+ * Returns '0' for invalid or non-positive values.
+ */
+export function dollarToRaw(dollar: string): string {
+  const num = parseFloat(dollar);
+  if (isNaN(num) || num <= 0) return '0';
+  return Math.round(num * 1_000_000).toString();
+}
+
+/**
+ * Converts raw USDC units (6 decimals) to a dollar string with 2 decimal places.
+ */
+export function rawToDollar(raw: string): string {
+  return (Number(raw) / 1_000_000).toFixed(2);
+}
+
+/**
  * Formats a timestamp as a relative time string (e.g., "just now", "5m ago").
  */
 export function formatRelativeTime(timestamp: number): string {

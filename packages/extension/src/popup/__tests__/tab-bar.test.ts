@@ -17,10 +17,10 @@ describe('renderTabBar', () => {
     };
   });
 
-  it('renders 4 tab buttons', () => {
+  it('renders 5 tab buttons', () => {
     renderTabBar(container, 'dashboard', onTabChange);
     const buttons = container.querySelectorAll('button[data-tab]');
-    expect(buttons).toHaveLength(4);
+    expect(buttons).toHaveLength(5);
   });
 
   it('marks the active tab with active class', () => {

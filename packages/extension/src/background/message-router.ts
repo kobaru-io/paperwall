@@ -15,8 +15,23 @@ import {
 } from './facilitator.js';
 import { initializePaymentClient, createSignedPayload } from './payment-client.js';
 import { addPayment, getHistory, updatePaymentStatus } from './history.js';
+import { getAddress } from 'viem';
 import { formatUsdcFromString } from '../shared/format.js';
 import { getExpectedAsset, getAllNetworks } from '../shared/constants.js';
+import {
+  getRules as getAutoPayRules,
+  trustSite,
+  removeSite,
+  updateSite,
+  updateGlobals,
+  addToDenylist,
+  removeFromDenylist,
+  toggleEnabled,
+  initializeDefaults,
+  dismissExplainer,
+  checkAndDeduct,
+  refundSpending,
+} from './auto-pay-storage.js';
 
 // ── Logging ─────────────────────────────────────────────────────────
 
@@ -41,6 +56,7 @@ interface ActivePageState {
   network: string;
   mode: string;
   siteKey?: string;
+  autoPayReason?: string;
   signal: {
     x402Version: number;
     resource: { url: string; mimeType?: string };
@@ -306,6 +322,30 @@ async function handlePageHasPaperwall(
     return { success: false, error: 'Missing required fields' };
   }
 
+  // S3: Cross-verify origin against browser-verified tab URL
+  const tabUrl = sender.tab?.url;
+  if (tabUrl) {
+    try {
+      const verifiedOrigin = new URL(tabUrl).origin;
+      if (verifiedOrigin !== origin) {
+        return { success: false, error: 'Origin mismatch' };
+      }
+    } catch {
+      return { success: false, error: 'Invalid tab URL' };
+    }
+  } else {
+    return { success: false, error: 'Cannot verify origin' };
+  }
+
+  // S7: Validate payTo addresses with EIP-55 checksum
+  for (const accept of signal.accepts) {
+    try {
+      accept.payTo = getAddress(accept.payTo);
+    } catch {
+      return { success: false, error: 'Invalid payment address' };
+    }
+  }
+
   const state: ActivePageState = {
     origin,
     url,
@@ -318,15 +358,74 @@ async function handlePageHasPaperwall(
     optimistic: (message['optimistic'] as string) !== 'false',
   };
 
-  // TODO(review): publisher-controlled payTo/amount/network fields stored without
-  // address-format validation (EIP-55 checksum). Tier 1 trust model accepts this —
-  // facilitator validates before settlement. Track as follow-up: add regex guard here
-  // for defense-in-depth. Severity: Medium - security-reviewer, 2026-03-09
-  activePages.set(tabId, state);
-
   console.log(`[paperwall ${ts()}] Page detected:`, { origin, price, mode: state.mode, optimistic: state.optimistic });
 
-  // Check affordability across all advertised networks for badge color
+  // ── Auto-pay decision (atomic check+deduct to prevent TOCTOU race) ──
+  const decision = await checkAndDeduct(origin, price);
+
+  if (decision.action === 'block') {
+    // Blocked site: suppress all signals — no badge, no storage
+    console.log(`[paperwall ${ts()}] Site blocked:`, { origin, reason: decision.reason });
+    return { success: true, blocked: true };
+  }
+
+  // Store page state for all non-blocked actions
+  activePages.set(tabId, state);
+
+  if (decision.action === 'auto-pay') {
+    // Auto-pay: trigger payment internally (budget already deducted atomically)
+    console.log(`[paperwall ${ts()}] Auto-pay triggered:`, { origin, price });
+
+    // Prevent concurrent payments
+    if (paymentsInProgress.has(tabId)) {
+      // Budget was already deducted but payment cannot proceed — refund
+      await refundSpending(origin, price);
+      setBadge(tabId, '$', BADGE_COLORS.detected);
+      return { success: true, autoPaid: false };
+    }
+
+    try {
+      const payResult = await handleSignAndPay({ type: 'SIGN_AND_PAY', tabId });
+      if (payResult.success) {
+        // Budget already deducted atomically by checkAndDeduct
+
+        // Send optimistic signal to content script
+        try {
+          await chrome.tabs.sendMessage(tabId, {
+            type: 'PAYMENT_OPTIMISTIC',
+            requestId: payResult['requestId'] as string,
+            amount: price,
+            url: state.url,
+          });
+        } catch { /* tab may be closed */ }
+
+        return { success: true, autoPaid: true };
+      }
+
+      // Payment returned { success: false } — refund the deducted budget
+      await refundSpending(origin, price);
+    } catch (err) {
+      // Payment threw — refund the deducted budget
+      await refundSpending(origin, price);
+      console.warn(`[paperwall ${ts()}] Auto-pay failed, falling back to prompt:`, err);
+    }
+
+    // Auto-pay failed — fall through to normal badge flow
+  }
+
+  if (decision.action === 'skip') {
+    // Wallet locked: store state but don't initiate payment
+    setBadge(tabId, '$', BADGE_COLORS.detected);
+    return { success: true };
+  }
+
+  // For prompt actions, store the reason for popup context
+  if (decision.reason) {
+    state.autoPayReason = decision.reason;
+    activePages.set(tabId, state);
+  }
+
+  // ── Affordability check for badge color ────────────────────────
   const sessionData = await chrome.storage.session.get('privateKey');
   if (sessionData['privateKey']) {
     const localData = await chrome.storage.local.get('wallet');
@@ -403,6 +502,7 @@ async function handleGetPageState(
     network: pageState.network,
     mode: pageState.mode,
     facilitatorUrl: pageState.facilitatorUrl,
+    autoPayReason: pageState.autoPayReason,
   };
 }
 
@@ -1042,7 +1142,14 @@ export function handleMessage(
   // (price, facilitatorUrl, network) as part of the protocol design — restriction
   // of PAGE_HAS_PAPERWALL to extension origins would break the payment detection
   // flow entirely. This is by design, not an oversight.
-  const sensitiveTypes = ['CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE', 'GET_BALANCES_ALL_NETWORKS', 'GET_HISTORY', 'EXPORT_PRIVATE_KEY', 'IMPORT_PRIVATE_KEY'];
+  const sensitiveTypes = [
+    'CREATE_WALLET', 'UNLOCK_WALLET', 'SIGN_AND_PAY', 'GET_BALANCE',
+    'GET_BALANCES_ALL_NETWORKS', 'GET_HISTORY', 'EXPORT_PRIVATE_KEY', 'IMPORT_PRIVATE_KEY',
+    'GET_AUTO_PAY_RULES', 'AUTO_PAY_TRUST_SITE', 'AUTO_PAY_REMOVE_SITE',
+    'AUTO_PAY_UPDATE_SITE', 'AUTO_PAY_UPDATE_GLOBALS', 'AUTO_PAY_TOGGLE_PAUSE',
+    'AUTO_PAY_ADD_DENYLIST', 'AUTO_PAY_REMOVE_DENYLIST', 'AUTO_PAY_INIT_DEFAULTS',
+    'DISMISS_EXPLAINER',
+  ];
   if (sensitiveTypes.includes(type ?? '')) {
     // sender.url starts with the extension scheme (chrome-extension:// on Chrome/Edge,
     // moz-extension:// on Firefox) — getURL('') returns the correct scheme at runtime.
@@ -1103,6 +1210,86 @@ export function handleMessage(
           return { success: false, error: 'Invalid parameters' };
         }
         return handleImportPrivateKey(privateKey, password);
+      }
+      case 'GET_AUTO_PAY_RULES': {
+        const rules = await getAutoPayRules();
+        return { success: true, rules };
+      }
+      case 'AUTO_PAY_TRUST_SITE': {
+        const siteOrigin = message['origin'];
+        const maxAmountRaw = message['maxAmountRaw'];
+        if (typeof siteOrigin !== 'string' || typeof maxAmountRaw !== 'string') {
+          return { success: false, error: 'Invalid parameters: origin and maxAmountRaw required' };
+        }
+        const monthlyBudgetRaw = message['monthlyBudgetRaw'] as string | undefined;
+        await trustSite(siteOrigin, maxAmountRaw, monthlyBudgetRaw);
+        return { success: true };
+      }
+      case 'AUTO_PAY_REMOVE_SITE': {
+        const siteOrigin = message['origin'];
+        if (typeof siteOrigin !== 'string') {
+          return { success: false, error: 'Invalid parameters: origin required' };
+        }
+        await removeSite(siteOrigin);
+        return { success: true };
+      }
+      case 'AUTO_PAY_UPDATE_SITE': {
+        const siteOrigin = message['origin'];
+        if (typeof siteOrigin !== 'string') {
+          return { success: false, error: 'Invalid parameters: origin required' };
+        }
+        const changes: { maxAmountRaw?: string; monthlyBudgetRaw?: string } = {};
+        if (typeof message['maxAmountRaw'] === 'string') changes.maxAmountRaw = message['maxAmountRaw'];
+        if (typeof message['monthlyBudgetRaw'] === 'string') changes.monthlyBudgetRaw = message['monthlyBudgetRaw'];
+        await updateSite(siteOrigin, changes);
+        return { success: true };
+      }
+      case 'AUTO_PAY_UPDATE_GLOBALS': {
+        const globalsChanges: { dailyLimitRaw?: string; monthlyLimitRaw?: string; defaultSiteBudgetRaw?: string; defaultMaxAmountRaw?: string } = {};
+        if (typeof message['dailyLimitRaw'] === 'string') globalsChanges.dailyLimitRaw = message['dailyLimitRaw'];
+        if (typeof message['monthlyLimitRaw'] === 'string') globalsChanges.monthlyLimitRaw = message['monthlyLimitRaw'];
+        if (typeof message['defaultSiteBudgetRaw'] === 'string') globalsChanges.defaultSiteBudgetRaw = message['defaultSiteBudgetRaw'];
+        if (typeof message['defaultMaxAmountRaw'] === 'string') globalsChanges.defaultMaxAmountRaw = message['defaultMaxAmountRaw'];
+        await updateGlobals(globalsChanges);
+        return { success: true };
+      }
+      case 'AUTO_PAY_TOGGLE_PAUSE': {
+        const enabled = message['enabled'];
+        if (typeof enabled !== 'boolean') {
+          return { success: false, error: 'Invalid parameters: enabled (boolean) required' };
+        }
+        await toggleEnabled(enabled);
+        return { success: true };
+      }
+      case 'AUTO_PAY_ADD_DENYLIST': {
+        const siteOrigin = message['origin'];
+        if (typeof siteOrigin !== 'string') {
+          return { success: false, error: 'Invalid parameters: origin required' };
+        }
+        await addToDenylist(siteOrigin);
+        return { success: true };
+      }
+      case 'AUTO_PAY_REMOVE_DENYLIST': {
+        const siteOrigin = message['origin'];
+        if (typeof siteOrigin !== 'string') {
+          return { success: false, error: 'Invalid parameters: origin required' };
+        }
+        await removeFromDenylist(siteOrigin);
+        return { success: true };
+      }
+      case 'AUTO_PAY_INIT_DEFAULTS': {
+        const dailyLimitRaw = message['dailyLimitRaw'];
+        const monthlyLimitRaw = message['monthlyLimitRaw'];
+        const defaultSiteBudgetRaw = message['defaultSiteBudgetRaw'];
+        if (typeof dailyLimitRaw !== 'string' || typeof monthlyLimitRaw !== 'string' || typeof defaultSiteBudgetRaw !== 'string') {
+          return { success: false, error: 'Invalid parameters: dailyLimitRaw, monthlyLimitRaw, defaultSiteBudgetRaw required' };
+        }
+        await initializeDefaults(dailyLimitRaw, monthlyLimitRaw, defaultSiteBudgetRaw);
+        return { success: true };
+      }
+      case 'DISMISS_EXPLAINER': {
+        await dismissExplainer();
+        return { success: true };
       }
       case 'SIGN_ONLY':
         return { success: false, error: 'SIGN_ONLY not yet implemented (Tier 3)' };

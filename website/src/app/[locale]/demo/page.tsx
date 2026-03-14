@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import Script from 'next/script';
+import { CHROME_STORE_URL } from '@/lib/constants';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
@@ -55,7 +56,7 @@ export default async function DemoPage({ params }: { params: Promise<{ locale: s
         <div className="border-2 border-[var(--border)] bg-[var(--muted)] p-4 rounded-none shadow-[4px_4px_0_var(--border)] mb-10 sm:p-6">
           <p className="mb-4 font-bold">{t('installPrompt')}</p>
           <a
-            href="https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako"
+            href={CHROME_STORE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center font-bold transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 border-2 border-[var(--border)] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[4px_4px_0_var(--border)] hover:shadow-[6px_6px_0_var(--border)] hover:bg-[var(--primary-hover)] h-12 px-8 text-lg rounded-none"

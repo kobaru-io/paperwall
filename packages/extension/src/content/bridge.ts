@@ -103,6 +103,12 @@ export function initBridge(): void {
       return;
     }
 
+    // Block dangerous URI schemes
+    const protocol = window.location.protocol;
+    if (protocol === 'file:' || protocol === 'data:' || protocol === 'blob:' || protocol === 'javascript:') {
+      return;
+    }
+
     if (event.origin !== pageOrigin) {
       return;
     }
@@ -137,7 +143,11 @@ export function initBridge(): void {
 
       // FIX CRITICAL-1: Don't relay the registration ack as PAPERWALL_PAYMENT_RESULT
       // The actual payment result will come later via chrome.runtime.onMessage
-      chrome.runtime.sendMessage(message);
+      chrome.runtime.sendMessage(message, (response: Record<string, unknown> | undefined) => {
+        if (response?.blocked) {
+          destroyBridge();
+        }
+      });
     }
   };
 

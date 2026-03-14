@@ -1,10 +1,11 @@
 // ── Types ─────────────────────────────────────────────────────────
 
-export type TabName = 'dashboard' | 'history' | 'stats' | 'settings';
+export type TabName = 'dashboard' | 'history' | 'budget' | 'stats' | 'settings';
 
 const TAB_LABELS: Record<TabName, string> = {
   dashboard: 'Home',
   history: 'History',
+  budget: 'Budget',
   stats: 'Stats',
   settings: 'Settings',
 };

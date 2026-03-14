@@ -69,14 +69,18 @@ import { getSupported, settle, verify } from '../src/background/facilitator.js';
 import { fetchBalance, fetchBalances } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
 import { addPayment, updatePaymentStatus } from '../src/background/history.js';
+import { _resetRateLimiterForTest } from '../src/background/auto-pay-rules.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function sendMessage(message: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const sender = message.type === 'PAGE_HAS_PAPERWALL'
+    ? { tab: { id: 1, url: message['url'] as string }, url: message['url'] as string }
+    : { tab: { id: 1 }, url: 'chrome-extension://test-extension-id/popup.html' };
   return new Promise((resolve) => {
     handleMessage(
       message,
-      { tab: { id: 1 }, url: 'chrome-extension://test-extension-id/popup.html' } as chrome.runtime.MessageSender,
+      sender as chrome.runtime.MessageSender,
       (response: unknown) => resolve(response as Record<string, unknown>),
     );
   });
@@ -105,6 +109,7 @@ describe('payment-flow', () => {
     localStorageMock._reset();
     sessionStorageMock._reset();
     _resetPageStateForTest();
+    _resetRateLimiterForTest();
     vi.clearAllMocks();
     // Restore getURL implementation after clearAllMocks wipes it
     vi.mocked(chrome.runtime.getURL).mockImplementation((path: string) =>
@@ -158,7 +163,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -167,6 +172,157 @@ describe('payment-flow', () => {
       expect(setBadgeTextMock).toHaveBeenCalledWith(
         expect.objectContaining({ text: '$' }),
       );
+    });
+  });
+
+  // ── Origin Cross-Verification (S3) ───────────────────────────
+
+  describe('Origin cross-verification (S3)', () => {
+    function sendMessageWithSender(
+      message: Record<string, unknown>,
+      sender: Partial<chrome.runtime.MessageSender>,
+    ): Promise<Record<string, unknown>> {
+      return new Promise((resolve) => {
+        handleMessage(
+          message,
+          sender as chrome.runtime.MessageSender,
+          (response: unknown) => resolve(response as Record<string, unknown>),
+        );
+      });
+    }
+
+    const validMessage = {
+      type: 'PAGE_HAS_PAPERWALL',
+      origin: 'https://example.com',
+      url: 'https://example.com/article',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      price: '10000',
+      network: 'eip155:324705682',
+      mode: 'client',
+      optimistic: 'false',
+      signal: {
+        x402Version: 2,
+        resource: { url: 'https://example.com/article' },
+        accepts: [{
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        }],
+      },
+    };
+
+    it('proceeds when origin matches sender.tab.url', async () => {
+      const response = await sendMessageWithSender(validMessage, {
+        tab: { id: 1, url: 'https://example.com/article' } as chrome.tabs.Tab,
+        url: 'https://example.com/article',
+      });
+      expect(response.success).toBe(true);
+    });
+
+    it('rejects when origin mismatches sender.tab.url', async () => {
+      const response = await sendMessageWithSender(validMessage, {
+        tab: { id: 1, url: 'https://evil.com/phishing' } as chrome.tabs.Tab,
+        url: 'https://evil.com/phishing',
+      });
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Origin mismatch');
+    });
+
+    it('rejects when sender.tab.url is missing', async () => {
+      const response = await sendMessageWithSender(validMessage, {
+        tab: { id: 1 } as chrome.tabs.Tab,
+      });
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Cannot verify origin');
+    });
+
+    it('rejects when sender.tab is missing entirely', async () => {
+      const response = await sendMessageWithSender(validMessage, {});
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('No tab ID');
+    });
+  });
+
+  // ── EIP-55 Address Validation (S7) ─────────────────────────
+
+  describe('EIP-55 address validation (S7)', () => {
+    it('accepts valid EIP-55 checksummed payTo address', async () => {
+      const response = await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:324705682',
+            amount: '10000',
+            asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+          }],
+        },
+      });
+      expect(response.success).toBe(true);
+    });
+
+    it('rejects invalid payTo address', async () => {
+      const response = await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:324705682',
+            amount: '10000',
+            asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+            payTo: '0xinvalidaddress',
+          }],
+        },
+      });
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Invalid payment address');
+    });
+
+    it('rejects completely non-hex payTo address', async () => {
+      const response = await sendMessage({
+        type: 'PAGE_HAS_PAPERWALL',
+        origin: 'https://example.com',
+        url: 'https://example.com/article',
+        facilitatorUrl: 'https://gateway.kobaru.io',
+        price: '10000',
+        network: 'eip155:324705682',
+        mode: 'client',
+        optimistic: 'false',
+        signal: {
+          x402Version: 2,
+          resource: { url: 'https://example.com/article' },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:324705682',
+            amount: '10000',
+            asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+            payTo: 'not-an-address-at-all',
+          }],
+        },
+      });
+      expect(response.success).toBe(false);
+      expect(response.error).toBe('Invalid payment address');
     });
   });
 
@@ -190,7 +346,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -241,7 +397,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -281,7 +437,7 @@ describe('payment-flow', () => {
           network: 'eip155:324705682',
           asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
           amount: '10000',
-          payTo: '0xreceiver',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           maxTimeoutSeconds: 300,
           extra: { name: 'USD Coin', version: '2' },
         },
@@ -289,7 +445,7 @@ describe('payment-flow', () => {
           signature: '0xsignature',
           authorization: {
             from: '0xsender',
-            to: '0xreceiver',
+            to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
             value: '10000',
             validAfter: '0',
             validBefore: '99999999',
@@ -342,7 +498,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '100000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -388,7 +544,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -449,7 +605,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -483,7 +639,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -519,7 +675,7 @@ describe('payment-flow', () => {
           network: 'eip155:324705682',
           asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
           amount: '10000',
-          payTo: '0xreceiver',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           maxTimeoutSeconds: 300,
           extra: { name: 'USD Coin', version: '2' },
         },
@@ -527,7 +683,7 @@ describe('payment-flow', () => {
           signature: '0xsignature',
           authorization: {
             from: '0xsender',
-            to: '0xreceiver',
+            to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
             value: '10000',
             validAfter: '0',
             validBefore: '99999999',
@@ -578,7 +734,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -613,7 +769,7 @@ describe('payment-flow', () => {
           network: 'eip155:324705682',
           asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
           amount: '10000',
-          payTo: '0xreceiver',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           maxTimeoutSeconds: 300,
           extra: { name: 'USD Coin', version: '2' },
         },
@@ -621,7 +777,7 @@ describe('payment-flow', () => {
           signature: '0xsignature',
           authorization: {
             from: '0xsender',
-            to: '0xreceiver',
+            to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
             value: '10000',
             validAfter: '0',
             validBefore: '99999999',
@@ -675,7 +831,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -709,7 +865,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -742,7 +898,7 @@ describe('payment-flow', () => {
           network: 'eip155:324705682',
           asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
           amount: '10000',
-          payTo: '0xreceiver',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           maxTimeoutSeconds: 300,
           extra: { name: 'USD Coin', version: '2' },
         },
@@ -750,7 +906,7 @@ describe('payment-flow', () => {
           signature: '0xsignature',
           authorization: {
             from: '0xsender',
-            to: '0xreceiver',
+            to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
             value: '10000',
             validAfter: '0',
             validBefore: '99999999',
@@ -789,7 +945,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -825,7 +981,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '100000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -865,7 +1021,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -895,7 +1051,7 @@ describe('payment-flow', () => {
           network: 'eip155:324705682',
           asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
           amount: '10000',
-          payTo: '0xreceiver',
+          payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           maxTimeoutSeconds: 300,
           extra: { name: 'USD Coin', version: '2' },
         },
@@ -903,7 +1059,7 @@ describe('payment-flow', () => {
           signature: '0xsignature',
           authorization: {
             from: '0xsender',
-            to: '0xreceiver',
+            to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
             value: '10000',
             validAfter: '0',
             validBefore: '99999999',
@@ -952,8 +1108,8 @@ describe('payment-flow', () => {
       vi.mocked(createSignedPayload).mockResolvedValue({
         x402Version: 2,
         resource: { url: 'https://example.com/article', description: '', mimeType: '' },
-        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
-        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
       });
       vi.mocked(verify).mockResolvedValue({ isValid: true });
       vi.mocked(settle).mockResolvedValue({ success: true, transaction: '0xtxhash', network: 'eip155:324705682' });
@@ -972,7 +1128,7 @@ describe('payment-flow', () => {
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
-          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' }],
+          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' }],
         },
         ...overrides,
       });
@@ -1014,8 +1170,8 @@ describe('payment-flow', () => {
       vi.mocked(createSignedPayload).mockResolvedValue({
         x402Version: 2,
         resource: { url: 'https://example.com/article', description: '', mimeType: '' },
-        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
-        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
       });
       vi.mocked(verify).mockResolvedValue({ isValid: true });
       if (settleDelay) {
@@ -1038,7 +1194,7 @@ describe('payment-flow', () => {
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
-          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' }],
+          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' }],
         },
       });
     }
@@ -1130,7 +1286,7 @@ describe('payment-flow', () => {
         signal: {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
-          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' }],
+          accepts: [{ scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' }],
         },
       });
       await setupPaymentMocks();
@@ -1177,8 +1333,8 @@ describe('payment-flow', () => {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
           accepts: [
-            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' },
-            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0xreceiver' },
+            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
+            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
           ],
         },
       });
@@ -1214,8 +1370,8 @@ describe('payment-flow', () => {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
           accepts: [
-            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' },
-            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0xreceiver' },
+            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
+            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
           ],
         },
       });
@@ -1257,7 +1413,7 @@ describe('payment-flow', () => {
             network: 'eip155:324705682',
             amount: '10000',
             asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-            payTo: '0xreceiver',
+            payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
           }],
         },
       });
@@ -1274,8 +1430,8 @@ describe('payment-flow', () => {
       vi.mocked(createSignedPayload).mockResolvedValue({
         x402Version: 2,
         resource: { url: 'https://example.com/article', description: '', mimeType: '' },
-        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
-        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+        accepted: { scheme: 'exact', network: 'eip155:324705682', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', amount: '10000', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
       });
       vi.mocked(verify).mockResolvedValue({ isValid: true });
       vi.mocked(settle).mockResolvedValue({ success: true, transaction: '0xtxhash', network: 'eip155:324705682' });
@@ -1307,8 +1463,8 @@ describe('payment-flow', () => {
           x402Version: 2,
           resource: { url: 'https://example.com/article' },
           accepts: [
-            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0xreceiver' },
-            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0xreceiver' },
+            { scheme: 'exact', network: 'eip155:324705682', amount: '10000', asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
+            { scheme: 'exact', network: 'eip155:84532', amount: '10000', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
           ],
         },
       });
@@ -1325,8 +1481,8 @@ describe('payment-flow', () => {
       vi.mocked(createSignedPayload).mockResolvedValue({
         x402Version: 2,
         resource: { url: 'https://example.com/article', description: '', mimeType: '' },
-        accepted: { scheme: 'exact', network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: '10000', payTo: '0xreceiver', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
-        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0xreceiver', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
+        accepted: { scheme: 'exact', network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: '10000', payTo: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } },
+        payload: { signature: '0xsig', authorization: { from: '0xsender', to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', value: '10000', validAfter: '0', validBefore: '99999999', nonce: '0x1234' } },
       });
       vi.mocked(verify).mockResolvedValue({ isValid: true });
 

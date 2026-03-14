@@ -14,7 +14,8 @@ This document explains the **why** behind Paperwall's architecture. For the tech
 8. [Optimistic Settlement: Default-On for Tier 1 & 2](#optimistic-settlement-default-on-for-tier-1--2)
 9. [Cross-Browser Extension: Architecture Decisions](#cross-browser-extension-architecture-decisions)
 10. [Multi-Network Support](#multi-network-support)
-11. [Other Design Decisions](#other-design-decisions)
+11. [Auto-Pay: Budget-Controlled Automatic Micropayments](#auto-pay-budget-controlled-automatic-micropayments)
+12. [Other Design Decisions](#other-design-decisions)
 
 ---
 
@@ -483,6 +484,87 @@ The extension (browser) and agent (Node.js CLI/server) both implement network se
 **The constraint:** sharing runtime logic between a Chrome extension (MV3 service worker, Web Crypto API, `chrome.*` APIs) and a Node.js process requires a package that works cleanly in both environments. At the time of implementation, the added packaging complexity of a shared `@paperwall/core` package was not justified for a ~50-line selection function.
 
 **The trade-off accepted:** the priority order and selection logic must be kept in sync manually. The logic is simple (sort by priority, filter by sufficient balance), well-tested in each package separately, and unlikely to diverge in practice. If the selection logic grows substantially (e.g., fee estimation, latency probing), extracting a shared package is the right next step.
+
+---
+
+## Auto-Pay: Budget-Controlled Automatic Micropayments
+
+### The Problem
+
+Paperwall users must manually approve every micropayment via the extension popup, even for sites they visit daily. A reader consuming 20 articles/day across trusted sites spends 60–100 seconds on repetitive approve clicks. This creates **approval fatigue** where the cognitive burden of each approval exceeds the payment value ($0.01–$0.10), leading to abandonment or habitual rejection.
+
+The irony: the extension successfully reduced payment friction from "enter credit card details" to "click approve," but for daily readers, even a single click per article is too much.
+
+### The Design Choice
+
+Auto-pay allows the extension to automatically approve payments for **explicitly trusted sites** within **user-defined budget limits**. Three interlocking controls protect the user:
+
+1. **Per-site trust** — every site must be individually approved via "Pay & Auto-approve"
+2. **Per-site monthly budget** — caps spending on any single site (default $0.50/month)
+3. **Global daily and monthly limits** — caps total auto-pay spending across all sites (default $2.00/day, $20.00/month)
+
+All three must pass for a payment to proceed automatically. If any check fails, the user sees a manual payment prompt with context about why auto-pay was paused.
+
+### Why Per-Site Trust, Not Global Auto-Pay
+
+The simplest approach would be "auto-pay any Paperwall site up to a global limit." We rejected this because:
+
+- A user browsing casually could hit dozens of Paperwall sites and drain their wallet without realizing it
+- There is no opportunity for the user to evaluate a site before committing money to it
+- It removes the deliberate consent that makes micropayments feel safe
+
+Per-site trust ensures that auto-pay is always the result of an explicit user decision. A site the user has never visited cannot silently extract payments. Rate limiting (max 5 auto-payment attempts per origin per 60-second window) provides an additional safeguard against rapid-fire payment attempts from any single origin.
+
+### Why a Separate Budget Tab (Not Settings)
+
+Budget management could live as a sub-section of Settings. We chose a dedicated tab because:
+
+- **Frequency of access** — users check spending regularly, not just when configuring. Burying budget info in Settings reduces visibility.
+- **Primary interaction surface** — budget is not a "set once" configuration. Users edit site budgets, review progress bars, and manage their denylist as part of normal usage.
+- **Popup real estate** — five tabs fit comfortably in the 360px popup width. The marginal cost of a fifth tab is near zero.
+
+### Why Daily + Monthly Limits (Not Lifetime)
+
+Research showed that daily + monthly limits match how people think about budgets. A "lifetime cap" was considered but rejected:
+
+- Users can always add more funds to their wallet, making a lifetime cap arbitrary
+- The wallet balance itself serves as the effective lifetime cap
+- Daily limits prevent single-day drain (e.g., binge-reading 50 articles)
+- Monthly limits align with subscription-era mental models
+
+### Why Price-Tier Trust
+
+When a user clicks "Pay & Auto-approve," the extension records the current price as the maximum per-transaction amount for that site. If the site later increases its price above this threshold, auto-pay pauses and shows a manual prompt explaining the price change.
+
+Without this, a publisher could set a $0.01 price to earn trust, then silently raise it to $0.10 — a 10x increase that would drain budgets faster than expected. Price-tier trust ensures the user's original consent is bounded.
+
+### Why Lazy Period Resets
+
+Budget periods (daily and monthly) reset **lazily** — not on a timer, but on the next payment attempt after the period has elapsed. This avoids:
+
+- Needing the `alarms` permission (which requires justification in Chrome Web Store review)
+- Background wake-ups that consume battery and resources
+- Complexity of timer management across service worker restarts
+
+The trade-off is that a user checking the Budget tab mid-period sees stale "spent" values until the next payment triggers a reset. In practice, this is invisible — the reset happens before the budget check, so no payment is incorrectly blocked or allowed.
+
+### Why Atomic Check-and-Deduct
+
+The TRD requires that budget checking and deduction happen in a single read-modify-write cycle. Without this, two tabs loading simultaneously could both pass the budget check before either deducts, causing both payments to proceed and the budget to be exceeded.
+
+The service worker is single-threaded but uses `await`, so interleaving is possible between the budget read and the storage write. The `checkAndDeduct` function reads rules, evaluates the 11-step decision chain, deducts if eligible, and writes back — all before yielding to the event loop. If the payment subsequently fails, `refundSpending` restores the deducted amount.
+
+### Why No Optimistic Signal on First Visit
+
+The extension never sends an optimistic payment signal to a publisher on the user's first visit. Optimistic flow tells the publisher "content will be unlocked" — but if the user then rejects the prompt, the publisher must awkwardly re-gate content that was already shown. For trusted sites, optimistic flow is safe because auto-pay will proceed (within budget). For unknown sites, the prompt must come first.
+
+### What We Explicitly Deferred
+
+- **Auto-trust new sites up to a limit** — effectively makes every site auto-approved; too risky for v1
+- **Cross-device budget sync** (`chrome.storage.sync`) — rate limits and security concerns
+- **Time-based trust decay** (auto-remove sites after 90 days inactive) — nice-to-have for v2
+- **Attention-weighted allocation** (Brave/Flattr model) — Paperwall uses explicit per-article pricing
+- **Export/import budget configuration** — deferred to v2
 
 ---
 

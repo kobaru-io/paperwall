@@ -58,7 +58,7 @@ graph LR
 
 **Service Worker** (background.js): The core of the extension. Manages the encrypted wallet, handles message routing, creates signed payment payloads via the x402 library (`@x402/evm`), communicates with the facilitator service, and tracks payment history.
 
-**Popup UI**: Renders screens based on wallet state -- setup (create wallet), unlock (enter password), or the main tabbed shell. The tabbed shell has four tabs: Home (dashboard with balance, address, recent history), History (full payment list with domain filter and date buckets), Stats (spending charts and top sites), and Settings (export/import key, create new wallet, about). A payment prompt (approve/reject) takes priority over the tabs when a payment signal is detected. An "Open in Tab" button lets you expand the popup into a full browser tab.
+**Popup UI**: Renders screens based on wallet state -- setup (create wallet), onboarding (spending limits), unlock (enter password), or the main tabbed shell. The tabbed shell has five tabs: Home (dashboard with balance, address, recent history), History (full payment list with domain filter and date buckets), Budget (auto-pay limits, trusted sites, denylist), Stats (spending charts and top sites), and Settings (export/import key, create new wallet, about). A payment prompt (Pay & Auto-approve / Pay once / Reject / Block) takes priority over the tabs when a payment signal is detected. An "Open in Tab" button lets you expand the popup into a full browser tab.
 
 **Facilitator Service**: External service at `https://gateway.kobaru.io`. Provides EIP-712 domain info (`/supported`), verifies signatures (`/verify`), and submits on-chain transactions (`/settle`). Not part of this repo.
 
@@ -101,6 +101,8 @@ paperwall/
           facilitator.ts    # HTTP client for facilitator service
           balance.ts        # On-chain USDC balance queries (with cache)
           history.ts        # Payment history (chrome.storage.local)
+          auto-pay-storage.ts # Auto-pay rules CRUD, atomic checkAndDeduct, budget tracking
+          auto-pay-rules.ts   # 11-step decision engine for auto-pay eligibility
         content/            # Content script
           index.ts          # Entry point, scans and observes for meta tags
           detector.ts       # DOM scanning + MutationObserver
@@ -111,18 +113,22 @@ paperwall/
           styles.css         # Popup styles
           history-cache.ts  # Singleton cache for history records (shared by History + Stats)
           components/
-            tab-bar.ts      # Tab bar with Home/History/Stats/Settings + Open in Tab
+            tab-bar.ts      # Tab bar with Home/History/Stats/Budget/Settings + Open in Tab
           screens/
             setup.ts        # Wallet creation screen
+            onboarding.ts   # First-run spending limits setup
             unlock.ts       # Password entry screen
             dashboard.ts    # Home tab: balance, address, recent history
             payment.ts      # Payment approval/rejection screen
             history-full.ts # History tab: domain filter, date buckets, expandable rows
             stats.ts        # Stats tab: time range selector, sparkline, top sites, bar chart
             settings.ts     # Settings tab: export/import key, create wallet, about
+            budget.ts       # Budget tab: auto-pay limits, trusted sites, denylist
         shared/             # Shared between background, content, popup
           constants.ts      # Network configs (SKALE testnet/mainnet, Base Sepolia/mainnet)
-          format.ts         # USDC formatting (smallest unit -> human-readable)
+          format.ts         # USDC formatting (smallest unit -> human-readable, dollarToRaw/rawToDollar)
+          auto-pay-types.ts # Shared types (SiteRule, AutoPayRules)
+          origin-security.ts # Shared URL/origin validation (HTTPS enforcement, private IP blocking, normalization)
       __tests__/            # Vitest unit tests
       dist/                 # Built extension (load this in Chrome)
 
@@ -569,8 +575,6 @@ npm run test:watch --workspace=packages/sdk
 
 ### Testing framework
 
-All packages use **Vitest**. Tests are co-located with source files (agent) or in `__tests__/` directories (SDK, extension).
-
 All packages use **Vitest**. Tests are co-located with source files (agent) or in `__tests__/` directories (SDK, extension). 900+ tests across all packages.
 
 ### Test organization
@@ -594,6 +598,11 @@ Background tests (`packages/extension/__tests__/`):
 - `detector.test.ts` -- Meta tag scanning and observation
 - `history.test.ts` -- Payment history storage
 - `x402-compliance.test.ts` -- x402 protocol compliance
+
+Auto-pay tests (`packages/extension/__tests__/`):
+- `auto-pay-storage.test.ts` -- Storage CRUD, checkAndDeduct atomicity, refundSpending, lazy period resets
+- `auto-pay-rules.test.ts` -- 11-step decision chain evaluation
+- `content-auto-pay.test.ts` -- Content script auto-pay detection integration
 
 Background tests (`packages/extension/src/background/__tests__/`):
 - `export-import.test.ts` -- EXPORT_PRIVATE_KEY and IMPORT_PRIVATE_KEY message handlers (17 tests). Covers sender origin validation, password validation, no-wallet errors, correct/wrong password, key format validation (hex chars, length), import with/without 0x prefix, session key cleared after import, overwriting existing wallet
@@ -865,6 +874,60 @@ The popup uses a tab-based shell rendered by `renderMainShell()` in `popup/index
 - **`switchTab(tab)`** -- Clears the content area and renders the selected tab's screen. Saves the active tab to session storage.
 - **`history-cache.ts`** -- A singleton that loads payment history once and shares it between the History and Stats tabs. Call `loadHistoryCache()` to populate and `clearHistoryCache()` to invalidate (for example, after wallet creation or import).
 - **Open in Tab** -- The tab bar includes an arrow button that calls `chrome.tabs.create()` with the popup URL and a `#tab=<name>` hash. The popup router reads this hash on init to restore the correct tab.
+
+### Auto-pay system
+
+The extension includes an auto-pay system that lets users trust sites for automatic payment approval within budget limits. It consists of three modules:
+
+**Storage** (`background/auto-pay-storage.ts`):
+Manages CRUD operations for auto-pay rules in `chrome.storage.local`. Key operations:
+- `getRules()` / `saveRules()` -- Read/write the full `AutoPayRules` object
+- `checkAndDeduct(origin, amountRaw)` -- Atomic read-modify-write that checks all budget limits and deducts in a single operation. Prevents race conditions from concurrent payments.
+- `refundSpending(origin, amountRaw)` -- Reverses a deduction if payment fails after budget was charged.
+- Lazy period resets: daily budget resets after 24 hours have elapsed, monthly budget resets when the UTC calendar month changes. Resets happen on read, not on a timer.
+
+**Rules engine** (`background/auto-pay-rules.ts`):
+An 11-step decision chain called from the service worker when a page is detected. Returns an `AutoPayDecision` with one of: `auto-pay`, `prompt`, `prompt-budget-exceeded`, `prompt-price-increased`, `block`, or `skip`.
+
+Decision chain (strict order):
+0. Origin validation -- block (HTTPS enforcement, private IP blocking via `shared/origin-security.ts`)
+1. Rate limiting -- block (max 5 attempts per origin per 60s, in-memory)
+2. Denylist check -- block
+3. Wallet unlock check -- skip
+4. Global enabled check -- prompt
+5. Trusted site check -- prompt (if not trusted)
+6. Price-tier check -- prompt-price-increased
+7. Per-site monthly budget -- prompt-budget-exceeded
+8. Global daily budget -- prompt-budget-exceeded
+9. Global monthly budget -- prompt-budget-exceeded
+10. All pass -- auto-pay
+
+**Types** (`shared/auto-pay-types.ts`):
+Shared between background and popup bundles. Defines `SiteRule` (per-site origin, max amount, monthly budget, spending, period start) and `AutoPayRules` (global limits, per-site map, denylist, onboarding state).
+
+**Message types** for auto-pay (10 total, all restricted to extension-origin senders):
+
+| Message type | Purpose |
+|-------------|---------|
+| `GET_AUTO_PAY_RULES` | Fetch current rules for the Budget tab |
+| `AUTO_PAY_TRUST_SITE` | Add a site to the trusted list |
+| `AUTO_PAY_REMOVE_SITE` | Remove a site from the trusted list |
+| `AUTO_PAY_UPDATE_SITE` | Update a site's budget settings |
+| `AUTO_PAY_UPDATE_GLOBALS` | Update global limits (daily, monthly, per-site default) |
+| `AUTO_PAY_TOGGLE_PAUSE` | Pause or resume auto-pay globally |
+| `AUTO_PAY_ADD_DENYLIST` | Block a site |
+| `AUTO_PAY_REMOVE_DENYLIST` | Unblock a site |
+| `AUTO_PAY_INIT_DEFAULTS` | Initialize default rules during onboarding |
+| `DISMISS_EXPLAINER` | Dismiss the auto-pay explainer banner |
+
+**Budget UI** (`popup/screens/budget.ts`):
+The fifth popup tab. Shows daily/monthly progress bars, trusted sites list with per-site budgets, and denylist management.
+
+**Onboarding** (`popup/screens/onboarding.ts`):
+First-run screen shown after wallet creation. Lets the user set initial daily, monthly, and per-site spending limits before entering the main dashboard.
+
+**Amount helpers** (`shared/format.ts`):
+`dollarToRaw()` and `rawToDollar()` convert between human-readable dollar strings and raw USDC unit strings (6 decimals).
 
 ### USDC amount formatting
 

@@ -5,6 +5,8 @@ import { renderPaymentPrompt } from './screens/payment.js';
 import { renderHistoryFull } from './screens/history-full.js';
 import { renderStats } from './screens/stats.js';
 import { renderSettings } from './screens/settings.js';
+import { renderBudget } from './screens/budget.js';
+import { renderOnboarding } from './screens/onboarding.js';
 import { renderTabBar, type TabName } from './components/tab-bar.js';
 import { loadHistoryCache, clearHistoryCache } from './history-cache.js';
 
@@ -27,7 +29,8 @@ async function init(): Promise<void> {
     if (!state.exists) {
       renderSetup(app, (address: string) => {
         clearHistoryCache();
-        renderMainShell(app, address, 'dashboard');
+        // Check if onboarding needed before showing dashboard
+        void checkOnboardingThenRender(app, address);
       });
     } else if (!state.unlocked) {
       renderUnlock(app, async () => {
@@ -51,6 +54,27 @@ async function init(): Promise<void> {
   }
 }
 
+async function checkOnboardingThenRender(
+  app: HTMLElement,
+  address: string,
+): Promise<void> {
+  try {
+    const rulesResponse = await chrome.runtime.sendMessage({ type: 'GET_AUTO_PAY_RULES' });
+    if (rulesResponse?.success) {
+      const rules = rulesResponse.rules as { onboardingCompleted?: boolean } | undefined;
+      if (rules && !rules.onboardingCompleted) {
+        renderOnboarding(app, () => {
+          renderMainShell(app, address, 'dashboard');
+        });
+        return;
+      }
+    }
+  } catch {
+    // If rules fetch fails, skip onboarding
+  }
+  renderMainShell(app, address, 'dashboard');
+}
+
 async function showMainOrPayment(
   app: HTMLElement,
   address: string,
@@ -69,6 +93,7 @@ async function showMainOrPayment(
           price: pageState.price as string,
           network: pageState.network as string,
           facilitatorUrl: pageState.facilitatorUrl as string,
+          autoPayReason: pageState.autoPayReason as string | undefined,
         },
         () => {
           clearHistoryCache();
@@ -122,6 +147,9 @@ async function renderMainShell(
         break;
       case 'history':
         renderHistoryFull(content, records);
+        break;
+      case 'budget':
+        renderBudget(content);
         break;
       case 'stats':
         renderStats(content, records);

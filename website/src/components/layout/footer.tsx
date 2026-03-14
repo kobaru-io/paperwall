@@ -1,9 +1,11 @@
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
+import { CHROME_STORE_URL, FIREFOX_STORE_URL } from '@/lib/constants';
 
 const FOOTER_LINKS = [
   { key: 'github', href: 'https://github.com/kobaru-io/paperwall' },
-  { key: 'chromeExtension', href: 'https://chromewebstore.google.com/detail/mfiecfoahcjlhdangehcojnicmnhpako' },
+  { key: 'chromeExtension', href: CHROME_STORE_URL },
+  { key: 'firefoxExtension', href: FIREFOX_STORE_URL },
   { key: 'npm', href: 'https://www.npmjs.com/package/@kobaru/paperwall' },
 ] as const;
 

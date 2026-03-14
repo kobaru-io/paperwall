@@ -56,6 +56,7 @@ vi.mock('../src/background/history.js', () => ({
 }));
 
 import { handleMessage, _resetPageStateForTest } from '../src/background/message-router.js';
+import { _resetRateLimiterForTest } from '../src/background/auto-pay-rules.js';
 import { getSupported, settle, verify } from '../src/background/facilitator.js';
 import { fetchBalance, fetchBalances } from '../src/background/balance.js';
 import { createSignedPayload } from '../src/background/payment-client.js';
@@ -63,11 +64,14 @@ import { addPayment } from '../src/background/history.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function sendMessage(message: Record<string, unknown>): Promise<Record<string, unknown>> {
+function sendMessage(
+  message: Record<string, unknown>,
+  senderOverride?: Partial<chrome.runtime.MessageSender>,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     handleMessage(
       message,
-      { tab: { id: 1 }, url: 'chrome-extension://test-extension-id/popup.html' } as chrome.runtime.MessageSender,
+      { tab: { id: 1 }, url: 'chrome-extension://test-extension-id/popup.html', ...senderOverride } as chrome.runtime.MessageSender,
       (response: unknown) => resolve(response as Record<string, unknown>),
     );
   });
@@ -84,30 +88,35 @@ async function setupUnlockedWallet(): Promise<string> {
   return result.address as string;
 }
 
+const VALID_PAY_TO = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
 async function setupPaymentPage(): Promise<void> {
-  await sendMessage({
-    type: 'PAGE_HAS_PAPERWALL',
-    origin: 'https://example.com',
-    url: 'https://example.com/article',
-    facilitatorUrl: 'https://gateway.kobaru.io',
-    price: '10000',
-    network: 'eip155:324705682',
-    mode: 'client',
-    optimistic: 'false',
-    signal: {
-      x402Version: 2,
-      resource: { url: 'https://example.com/article' },
-      accepts: [{
-        scheme: 'exact',
-        network: 'eip155:324705682',
-        amount: '10000',
-        asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
-        payTo: '0xreceiver',
-        maxTimeoutSeconds: 300,
-        extra: {},
-      }],
+  await sendMessage(
+    {
+      type: 'PAGE_HAS_PAPERWALL',
+      origin: 'https://example.com',
+      url: 'https://example.com/article',
+      facilitatorUrl: 'https://gateway.kobaru.io',
+      price: '10000',
+      network: 'eip155:324705682',
+      mode: 'client',
+      optimistic: 'false',
+      signal: {
+        x402Version: 2,
+        resource: { url: 'https://example.com/article' },
+        accepts: [{
+          scheme: 'exact',
+          network: 'eip155:324705682',
+          amount: '10000',
+          asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
+          payTo: VALID_PAY_TO,
+          maxTimeoutSeconds: 300,
+          extra: {},
+        }],
+      },
     },
-  });
+    { tab: { id: 1, url: 'https://example.com/article' } as chrome.tabs.Tab },
+  );
 }
 
 function mockSuccessfulPaymentFlow(): void {
@@ -143,7 +152,7 @@ function mockSuccessfulPaymentFlow(): void {
       network: 'eip155:324705682',
       asset: '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD',
       amount: '10000',
-      payTo: '0xreceiver',
+      payTo: VALID_PAY_TO,
       maxTimeoutSeconds: 300,
       extra: { name: 'USD Coin', version: '2' },
     },
@@ -151,7 +160,7 @@ function mockSuccessfulPaymentFlow(): void {
       signature: '0xsignature',
       authorization: {
         from: '0xsender',
-        to: '0xreceiver',
+        to: VALID_PAY_TO,
         value: '10000',
         validAfter: '0',
         validBefore: '99999999',
@@ -177,6 +186,7 @@ describe('x402 wire format compliance', () => {
     localStorageMock._reset();
     sessionStorageMock._reset();
     _resetPageStateForTest();
+    _resetRateLimiterForTest();
     vi.clearAllMocks();
     // Restore getURL implementation after clearAllMocks wipes it
     vi.mocked(chrome.runtime.getURL).mockImplementation((path: string) =>
@@ -244,7 +254,7 @@ describe('x402 wire format compliance', () => {
       expect(paymentRequirements).toHaveProperty('network', 'eip155:324705682');
       expect(paymentRequirements).toHaveProperty('asset', '0x2e08028E3C4c2356572E096d8EF835cD5C6030bD');
       expect(paymentRequirements).toHaveProperty('amount', '10000');
-      expect(paymentRequirements).toHaveProperty('payTo', '0xreceiver');
+      expect(paymentRequirements).toHaveProperty('payTo', VALID_PAY_TO);
       expect(paymentRequirements).toHaveProperty('maxTimeoutSeconds', 300);
       expect(paymentRequirements).toHaveProperty('extra');
     });

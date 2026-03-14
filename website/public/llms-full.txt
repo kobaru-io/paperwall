@@ -50,14 +50,13 @@ The SDK is ~5 KB and works with any website. No backend needed.
 Wrap your paywalled content in a div with id="paperwall-content".
 
 ## For Readers
-1. Install the Paperwall Chrome extension
+1. Install the Paperwall browser extension
 2. Create a wallet (password-protected, encrypted on your device)
 3. Deposit USDC (as little as $5 = 500 articles at $0.01 each)
 4. Browse the web normally. When you hit a paywalled article, click "Pay" in the extension popup
 5. Content unlocks instantly
 
-Supported browsers: Chrome, Edge, Brave, Arc (all Chromium-based).
-Firefox and Safari support is on the roadmap.
+Supported browsers: Chrome, Edge, Brave, Arc (all Chromium-based), Firefox, and Firefox for Android.
 
 Your wallet is encrypted with PBKDF2 (600k iterations) + AES-256-GCM.
 Only you can access your funds with your password.
@@ -138,7 +137,7 @@ Q: Is Paperwall open source?
 A: Yes! Everything is open source under GPL-3.0.
 
 Q: Which browsers are supported?
-A: Chrome and Chromium-based browsers (Edge, Brave, Arc). Firefox and Safari support is planned.
+A: Chrome and Chromium-based browsers (Edge, Brave, Arc), and Firefox. Safari support is planned.
 
 Q: How do I add Paperwall to my website?
 A: Add a single script tag to your HTML. It takes less than 60 seconds.

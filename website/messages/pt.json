@@ -14,6 +14,7 @@
   "footer": {
     "github": "GitHub",
     "chromeExtension": "Extensão do Chrome",
+    "firefoxExtension": "Extensão do Firefox",
     "npm": "Pacote npm",
     "builtBy": "Criado por",
     "kobaru": "Kobaru",
@@ -25,7 +26,13 @@
     "tagline": "Um protocolo aberto e gratuito de micropagamentos para a web.",
     "subtitle": "Pague um centavo para ler um artigo. Sem assinaturas, sem anúncios, sem rastreamento. Gratuito para leitores, agentes e editores.",
     "ctaPrimary": "Começar",
-    "ctaSecondary": "Testar o Demo"
+    "ctaSecondary": "Testar o Demo",
+    "ctaInstall": "Instalar Extensão",
+    "ctaInstallChrome": "Instalar para Chrome",
+    "ctaInstallFirefox": "Instalar para Firefox",
+    "ctaAltFirefox": "Também disponível para Firefox",
+    "ctaAltChrome": "Também disponível para Chrome",
+    "ctaAvailableBoth": "Disponível para <chrome>Chrome</chrome> e <firefox>Firefox</firefox>"
   },
   "problem": {
     "title": "Por que Paperwall?",
